@@ -1,7 +1,7 @@
 package com.generic.tools.ai;
 
 import com.generic.tools.ai.agent.Assistant;
-import com.generic.tools.ai.tools.WeatherTool; 
+// Note: WeatherTool import is REMOVED. The factory is now generic!
 
 import dev.langchain4j.data.document.loader.FileSystemDocumentLoader;
 import dev.langchain4j.data.document.splitter.DocumentSplitters;
@@ -27,48 +27,54 @@ public class SuperAgentFactory {
     // Define the persistent file path
     private static final String EMBEDDING_FILE = "src/main/resources/embeddings.json";
 
-    // 1. Default Constructor (Standard Settings)
+    // 1. Default Constructor
     public SuperAgentFactory() {
-        this.baseUrl = "http://localhost:11434";
-        this.modelName = "gpt-oss:20b-cloud";
+        this("http://localhost:11434", "gpt-oss:20b-cloud");
     }
 
-    // 2. Custom Constructor (For A/B Testing or different models)
+    // 2. Custom Constructor
     public SuperAgentFactory(String baseUrl, String modelName) {
         this.baseUrl = baseUrl;
         this.modelName = modelName;
     }
 
-    public Assistant createSuperAgent(String docFolderPath) {
+    /**
+     * Refactored Method: Accepts Variable Arguments for tools
+     * @param docFolderPath Path to the documents folder
+     * @param tools Comma-separated list of tool instances (e.g., new WeatherTool())
+     */
+    public Assistant createSuperAgent(String docFolderPath, Object... tools) {
         System.out.println("--- 🦸 Initializing Super Agent (" + this.modelName + ") ---");
 
-        // 3. Configure Model (Uses instance variables)
+        // 3. Configure Model
         ChatLanguageModel model = OllamaChatModel.builder()
                 .baseUrl(this.baseUrl)
                 .modelName(this.modelName)
-                .temperature(0.0) // 0.0 is best for mixing Tools + RAG
+                .temperature(0.0)
                 .timeout(Duration.ofSeconds(60))
                 .build();
 
-        // 4. Setup RAG (Uses helper method)
+        // 4. Setup RAG
         ContentRetriever retriever = setupRAG(docFolderPath);
 
-        // 5. Build the Agent
+        // 5. Build the Agent with INJECTED tools
         return AiServices.builder(Assistant.class)
                 .chatLanguageModel(model)
                 .chatMemory(MessageWindowChatMemory.withMaxMessages(10))
-                .tools(new WeatherTool())   // <--- Capability A: Tools
-                .contentRetriever(retriever) // <--- Capability B: Docs
+                
+                // --- CHANGE HERE: Use the passed arguments ---
+                .tools(tools) 
+                
+                .contentRetriever(retriever)
                 .build();
     }
 
-    // Helper Method to handle the "Brain" logic
+    // Helper Method (Unchanged logic)
     private ContentRetriever setupRAG(String folderPath) {
         AllMiniLmL6V2EmbeddingModel embeddingModel = new AllMiniLmL6V2EmbeddingModel();
         InMemoryEmbeddingStore<TextSegment> embeddingStore;
         Path storePath = Paths.get(EMBEDDING_FILE);
 
-        // Persistence Logic: Load if exists, Scan if new
         if (Files.exists(storePath)) {
             System.out.println("💾 Loading existing brain from file...");
             embeddingStore = InMemoryEmbeddingStore.fromFile(storePath);
@@ -76,7 +82,6 @@ public class SuperAgentFactory {
             System.out.println("📂 Scanning documents in: " + folderPath);
             embeddingStore = new InMemoryEmbeddingStore<>();
             
-            // Filter for safe files
             PathMatcher filter = FileSystems.getDefault().getPathMatcher("glob:*.{pdf,docx,txt,TXT,java}");
             var documents = FileSystemDocumentLoader.loadDocuments(Paths.get(folderPath), filter);
 
@@ -88,7 +93,6 @@ public class SuperAgentFactory {
                         .build();
                 ingestor.ingest(documents);
                 
-                // Save to disk
                 embeddingStore.serializeToFile(storePath);
                 System.out.println("✅ Indexed & Saved " + documents.size() + " files.");
             } else {
