@@ -34,3 +34,5 @@ replay_pid*
 *.iml
 target/surefire-reports/TEST-com.generic.tools.ai.tools.WeatherToolTest.xml
 *.lst
+.classpath
+.project
