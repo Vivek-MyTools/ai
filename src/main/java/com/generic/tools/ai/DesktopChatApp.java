@@ -5,6 +5,8 @@ import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.Insets;
 import java.awt.event.ActionEvent;
+import java.util.HashMap;
+import java.util.Map;
 
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
@@ -23,13 +25,16 @@ import com.generic.tools.ai.tools.WeatherTool;
 
 public class DesktopChatApp extends JFrame {
 
-	private static final long serialVersionUID = -6839188219549732510L;
-	private final JTextArea chatArea;
+    private static final long serialVersionUID = -6839188219549732510L;
+    private final JTextArea chatArea;
     private final JTextField inputField;
     private final JButton sendButton;
-    private final JComboBox<String> modelSelector; // <--- NEW: Dropdown
+    private final JComboBox<String> modelSelector;
     
-    // Agent is no longer 'final' because we change it dynamically
+    // Cache to store one Assistant instance per model name
+    private final Map<String, Assistant> agentCache = new HashMap<>();
+
+    // Current active agent
     private Assistant agent; 
 
     public DesktopChatApp() {
@@ -45,11 +50,14 @@ public class DesktopChatApp extends JFrame {
         
         JLabel modelLabel = new JLabel("Select Model:");
         
-        // Define your models here
-        String[] models = {"gpt-oss:20b-cloud", "llama3.2"};
+        String[] models = {
+                "gpt-oss:20b-cloud",
+                "llama3.2", 
+                "mistral",                
+                "tinyllama"
+        };
         modelSelector = new JComboBox<>(models);
         
-        // Add Action Listener: Re-load agent when model changes
         modelSelector.addActionListener(e -> {
             String selectedModel = (String) modelSelector.getSelectedItem();
             reloadAgent(selectedModel);
@@ -57,7 +65,7 @@ public class DesktopChatApp extends JFrame {
 
         topPanel.add(modelLabel);
         topPanel.add(modelSelector);
-        add(topPanel, BorderLayout.NORTH); // Add to top of window
+        add(topPanel, BorderLayout.NORTH);
 
         // --- 2. CENTER PANEL (Chat Area) ---
         chatArea = new JTextArea();
@@ -86,30 +94,39 @@ public class DesktopChatApp extends JFrame {
         sendButton.addActionListener(this::sendMessage);
         inputField.addActionListener(this::sendMessage);
 
-        // Initialize with the default selection (first item in list)
+        // Initialize with default
         reloadAgent(models[0]);
     }
 
-    /**
-     * Helper method to create a new Agent with the specific model name
-     */
     private void reloadAgent(String modelName) {
-        // Disable UI while loading (Optional UX improvement)
+        // Disable UI
         inputField.setEnabled(false);
         sendButton.setEnabled(false);
         
-        // Run in background to prevent freezing GUI
         SwingWorker<Void, Void> worker = new SwingWorker<>() {
             @Override
             protected Void doInBackground() {
-                System.out.println("🔄 Switching to model: " + modelName);
-                
-                // Instantiate Factory with the NEW model name
-                SuperAgentFactory factory = new SuperAgentFactory("http://localhost:11434", modelName);
-                
-                // Re-create the agent
-                // Note: We inject the tools here every time we reload
-                agent = factory.createSuperAgent("src/main/resources/my_docs", new WeatherTool(), new CalculatorTool());
+                // 1. Check if we already have this agent in memory
+                if (agentCache.containsKey(modelName)) {
+                    System.out.println("⚡ Using cached agent for: " + modelName);
+                    agent = agentCache.get(modelName);
+                } else {
+                    // 2. If not, create it freshly
+                    System.out.println("🔄 Creating NEW agent for: " + modelName);
+                    
+                    SuperAgentFactory factory = new SuperAgentFactory("http://localhost:11434", modelName);
+                    Assistant newAgent;
+
+                    if (modelName.equals("tinyllama")) {
+                        newAgent = factory.createSuperAgent("src/main/resources/my_docs");
+                    } else {                
+                        newAgent = factory.createSuperAgent("src/main/resources/my_docs", new WeatherTool(), new CalculatorTool());
+                    }
+
+                    // 3. Store in cache and set as active
+                    agentCache.put(modelName, newAgent);
+                    agent = newAgent;
+                }
                 return null;
             }
 
@@ -139,7 +156,7 @@ public class DesktopChatApp extends JFrame {
                     return agent.chat(userText);
                 } catch (Exception ex) {
                     return "Error: " + ex.getMessage();
-                }	
+                }   
             }
 
             @Override

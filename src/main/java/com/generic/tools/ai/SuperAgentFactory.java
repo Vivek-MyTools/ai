@@ -51,7 +51,7 @@ public class SuperAgentFactory {
                 .baseUrl(this.baseUrl)
                 .modelName(this.modelName)
                 .temperature(0.0)
-                .timeout(Duration.ofSeconds(60))
+                .timeout(Duration.ofMinutes(2))
                 .build();
 
         // 4. Setup RAG
