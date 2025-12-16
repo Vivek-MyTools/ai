@@ -18,7 +18,7 @@ public class Main {
 
 		// 1. Create the Factory (Pass custom model if needed)
 		// Example: new RagAgentFactory("http://localhost:11434", "llama3.2");
-		SuperAgentFactory factory = new SuperAgentFactory();
+		SuperAgentFactory factory = new SuperAgentFactory("http://localhost:11434", "llama3.2");
 
 		// 2. Create the Agent using the instance method
 		Assistant agent = factory.createSuperAgent(documentPath, calcTool, weatherTool);

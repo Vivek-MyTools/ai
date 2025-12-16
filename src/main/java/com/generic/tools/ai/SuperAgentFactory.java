@@ -1,9 +1,9 @@
 package com.generic.tools.ai;
 
 import com.generic.tools.ai.agent.Assistant;
-// Note: WeatherTool import is REMOVED. The factory is now generic!
-
 import dev.langchain4j.data.document.loader.FileSystemDocumentLoader;
+import dev.langchain4j.data.document.parser.apache.pdfbox.ApachePdfBoxDocumentParser;
+import dev.langchain4j.data.document.parser.TextDocumentParser;
 import dev.langchain4j.data.document.splitter.DocumentSplitters;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
@@ -15,96 +15,132 @@ import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.store.embedding.EmbeddingStoreIngestor;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
+import java.io.IOException;
 
 import java.nio.file.*;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Stream;
 
 public class SuperAgentFactory {
 
     private final String baseUrl;
     private final String modelName;
-    
-    // Define the persistent file path
-    private static final String EMBEDDING_FILE = "src/main/resources/embeddings.json";
 
-    // 1. Default Constructor
-    public SuperAgentFactory() {
-        this("http://localhost:11434", "gpt-oss:20b-cloud");
-    }
-
-    // 2. Custom Constructor
     public SuperAgentFactory(String baseUrl, String modelName) {
         this.baseUrl = baseUrl;
         this.modelName = modelName;
     }
 
-    /**
-     * Refactored Method: Accepts Variable Arguments for tools
-     * @param docFolderPath Path to the documents folder
-     * @param tools Comma-separated list of tool instances (e.g., new WeatherTool())
-     */
     public Assistant createSuperAgent(String docFolderPath, Object... tools) {
         System.out.println("--- 🦸 Initializing Super Agent (" + this.modelName + ") ---");
 
-        // 3. Configure Model
         ChatLanguageModel model = OllamaChatModel.builder()
                 .baseUrl(this.baseUrl)
                 .modelName(this.modelName)
                 .temperature(0.0)
-                .timeout(Duration.ofMinutes(2))
+                .timeout(Duration.ofSeconds(60))
                 .build();
 
-        // 4. Setup RAG
+        // Pass the user-selected folder path
         ContentRetriever retriever = setupRAG(docFolderPath);
 
-        // 5. Build the Agent with INJECTED tools
         return AiServices.builder(Assistant.class)
                 .chatLanguageModel(model)
                 .chatMemory(MessageWindowChatMemory.withMaxMessages(10))
-                
-                // --- CHANGE HERE: Use the passed arguments ---
-                .tools(tools) 
-                
+                .tools(tools)
                 .contentRetriever(retriever)
                 .build();
     }
 
-    // Helper Method (Unchanged logic)
     private ContentRetriever setupRAG(String folderPath) {
         AllMiniLmL6V2EmbeddingModel embeddingModel = new AllMiniLmL6V2EmbeddingModel();
-        InMemoryEmbeddingStore<TextSegment> embeddingStore;
-        Path storePath = Paths.get(EMBEDDING_FILE);
+        InMemoryEmbeddingStore<TextSegment> embeddingStore = new InMemoryEmbeddingStore<>();
 
-        if (Files.exists(storePath)) {
-            System.out.println("💾 Loading existing brain from file...");
-            embeddingStore = InMemoryEmbeddingStore.fromFile(storePath);
-        } else {
-            System.out.println("📂 Scanning documents in: " + folderPath);
-            embeddingStore = new InMemoryEmbeddingStore<>();
-            
-            PathMatcher filter = FileSystems.getDefault().getPathMatcher("glob:*.{pdf,docx,txt,TXT,java}");
-            var documents = FileSystemDocumentLoader.loadDocuments(Paths.get(folderPath), filter);
+        if (folderPath != null && !folderPath.isEmpty()) {
+            Path docDir = Paths.get(folderPath);
 
-            if (!documents.isEmpty()) {
+            if (!Files.exists(docDir)) {
+                System.out.println("❌ ERROR: Directory does not exist: " + docDir.toAbsolutePath());
+                return createEmptyRetriever(embeddingStore, embeddingModel);
+            }
+
+            System.out.println("📂 Scanning folder: " + docDir.toAbsolutePath());
+
+            // 1. Define Pattern (Recursive + Case Insensitive)
+            String pattern = "glob:**/*.{pdf,docx,txt,PDF,DOCX,TXT}";
+            PathMatcher matcher = FileSystems.getDefault().getPathMatcher(pattern);
+
+            List<dev.langchain4j.data.document.Document> allDocuments = new ArrayList<>();
+
+            // 2. MANUALLY collect files (Since this works in your logs!)
+            try (Stream<Path> stream = Files.walk(docDir)) {
+                stream.filter(Files::isRegularFile).forEach(file -> {
+                    // Check if file matches our pattern
+                if (matcher.matches(file)) {
+                    try {
+                        System.out.println("   --> Loading: " + file.getFileName());
+
+                        dev.langchain4j.data.document.Document doc;
+                        String fileName = file.getFileName().toString().toLowerCase();
+
+                        // 1. EXPLICITLY choose the parser based on extension
+                        if (fileName.endsWith(".txt") || fileName.endsWith(".java") || fileName.endsWith(".md")) {
+                            doc = FileSystemDocumentLoader.loadDocument(file, new TextDocumentParser());
+                        } 
+                        else if (fileName.endsWith(".pdf")) {
+                            // Requires 'langchain4j-document-parser-apache-pdfbox' dependency
+                            doc = FileSystemDocumentLoader.loadDocument(file, new ApachePdfBoxDocumentParser());
+                        } 
+                        else {
+                            // Fallback: Try to let the library guess
+                            doc = FileSystemDocumentLoader.loadDocument(file);
+                        }
+
+                        allDocuments.add(doc);
+
+                    } catch (Exception e) {
+                        // 2. BETTER ERROR LOGGING
+                        System.err.println("   ❌ Failed to read file: " + file.getFileName());
+                        System.err.println("      Reason: " + e.getClass().getSimpleName() + " - " + e.getMessage());
+
+                        // OneDrive Check
+                        if (e.getMessage() != null && e.getMessage().contains("Access is denied")) {
+                            System.err.println("      💡 HINT: This might be a OneDrive 'Cloud-only' file. Right-click the file and select 'Always keep on this device'.");
+                        }
+                    }
+                }
+                });
+            } catch (IOException e) {
+                System.err.println("❌ Error walking directory: " + e.getMessage());
+            }
+
+            // 3. Ingest whatever we found
+            if (!allDocuments.isEmpty()) {
                 EmbeddingStoreIngestor ingestor = EmbeddingStoreIngestor.builder()
                         .embeddingStore(embeddingStore)
                         .embeddingModel(embeddingModel)
                         .documentSplitter(DocumentSplitters.recursive(300, 20))
                         .build();
-                ingestor.ingest(documents);
-                
-                embeddingStore.serializeToFile(storePath);
-                System.out.println("✅ Indexed & Saved " + documents.size() + " files.");
+                ingestor.ingest(allDocuments);
+                System.out.println("🎉 Successfully Indexed " + allDocuments.size() + " files.");
             } else {
-                System.out.println("⚠️ No documents found to index.");
+                System.out.println("⚠️ No valid documents loaded.");
             }
         }
 
+        return createEmptyRetriever(embeddingStore, embeddingModel);
+    }
+
+// Keep helper
+    private ContentRetriever createEmptyRetriever(InMemoryEmbeddingStore<TextSegment> store, AllMiniLmL6V2EmbeddingModel model) {
         return EmbeddingStoreContentRetriever.builder()
-                .embeddingStore(embeddingStore)
-                .embeddingModel(embeddingModel)
+                .embeddingStore(store)
+                .embeddingModel(model)
                 .maxResults(3)
                 .minScore(0.6)
                 .build();
+
     }
 }

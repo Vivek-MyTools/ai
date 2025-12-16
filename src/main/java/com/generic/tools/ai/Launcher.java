@@ -2,7 +2,7 @@ package com.generic.tools.ai;
 
 import javax.swing.SwingUtilities;
 
-public class AIAgentUILauncher {
+public class Launcher {
 
 	public static void main(String[] args) {
 		SwingUtilities.invokeLater(() -> {
