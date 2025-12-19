@@ -21,12 +21,16 @@ import java.nio.file.*;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Stream;
 
 public class SuperAgentFactory {
 
     private final String baseUrl;
     private final String modelName;
+    
+    private static final Map<String, ChatLanguageModel> modelCache = new ConcurrentHashMap<>();
 
     public SuperAgentFactory(String baseUrl, String modelName) {
         this.baseUrl = baseUrl;
@@ -36,12 +40,17 @@ public class SuperAgentFactory {
     public Assistant createSuperAgent(String docFolderPath, Object... tools) {
         System.out.println("--- 🦸 Initializing Super Agent (" + this.modelName + ") ---");
 
-        ChatLanguageModel model = OllamaChatModel.builder()
-                .baseUrl(this.baseUrl)
-                .modelName(this.modelName)
-                .temperature(0.0)
-                .timeout(Duration.ofSeconds(60))
-                .build();
+        String cacheKey = this.baseUrl + "::" + this.modelName;
+        
+        ChatLanguageModel model = modelCache.computeIfAbsent(cacheKey, key -> {
+            System.out.println("⚡ Building NEW Model instance for: " + this.modelName);
+            return OllamaChatModel.builder()
+                    .baseUrl(this.baseUrl)
+                    .modelName(this.modelName)
+                    .temperature(0.0)
+                    .timeout(Duration.ofSeconds(60))
+                    .build();
+        });
 
         // Pass the user-selected folder path
         ContentRetriever retriever = setupRAG(docFolderPath);
@@ -69,7 +78,7 @@ public class SuperAgentFactory {
             System.out.println("📂 Scanning folder: " + docDir.toAbsolutePath());
 
             // 1. Define Pattern (Recursive + Case Insensitive)
-            String pattern = "glob:**/*.{pdf,docx,txt,PDF,DOCX,TXT}";
+            String pattern = "glob:**/*.{pdf,docx,txt,java,js,css,PDF,DOCX,TXT}";
             PathMatcher matcher = FileSystems.getDefault().getPathMatcher(pattern);
 
             List<dev.langchain4j.data.document.Document> allDocuments = new ArrayList<>();

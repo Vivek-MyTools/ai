@@ -40,6 +40,11 @@ public class DesktopChatApp extends JFrame {
     // Store user's selected path
     private String currentDocPath = null; 
 
+    public DesktopChatApp(String docPath) {
+        this();
+        currentDocPath = docPath;
+    }
+    
     public DesktopChatApp() {
         super("AI Super Agent (Local)");
         setSize(850, 600); // Slightly wider for path label
@@ -138,6 +143,10 @@ public class DesktopChatApp extends JFrame {
 
                 System.out.println("🔄 Creating NEW agent for: " + modelName + " with docs: " + currentDocPath);
                 SuperAgentFactory factory = new SuperAgentFactory("http://localhost:11434", modelName);
+                
+                if(currentDocPath == null || currentDocPath.length() == 0) {
+                    currentDocPath = "src/main/resources/my_docs";
+                }
                 
                 // Inject tools and the selected path
                 // If currentDocPath is null, factory will handle it safely
