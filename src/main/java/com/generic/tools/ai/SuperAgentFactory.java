@@ -36,22 +36,22 @@ public class SuperAgentFactory {
         this.baseUrl = baseUrl;
         this.modelName = modelName;
     }
+    
+    public Assistant createSuperAgent(String docFolderPath){
+         ChatLanguageModel model = createLanguageModel();
+         ContentRetriever retriever = setupRAG(docFolderPath);
+         return AiServices.builder(Assistant.class)
+                .chatLanguageModel(model)
+                .chatMemory(MessageWindowChatMemory.withMaxMessages(10))                
+                .contentRetriever(retriever)
+                .build();
+    }
 
     public Assistant createSuperAgent(String docFolderPath, Object... tools) {
         System.out.println("--- 🦸 Initializing Super Agent (" + this.modelName + ") ---");
-
-        String cacheKey = this.baseUrl + "::" + this.modelName;
+ 
+        ChatLanguageModel model = createLanguageModel();
         
-        ChatLanguageModel model = modelCache.computeIfAbsent(cacheKey, key -> {
-            System.out.println("⚡ Building NEW Model instance for: " + this.modelName);
-            return OllamaChatModel.builder()
-                    .baseUrl(this.baseUrl)
-                    .modelName(this.modelName)
-                    .temperature(0.0)
-                    .timeout(Duration.ofSeconds(60))
-                    .build();
-        });
-
         // Pass the user-selected folder path
         ContentRetriever retriever = setupRAG(docFolderPath);
 
@@ -61,6 +61,19 @@ public class SuperAgentFactory {
                 .tools(tools)
                 .contentRetriever(retriever)
                 .build();
+    }
+    
+    private ChatLanguageModel createLanguageModel() {
+         String cacheKey = this.baseUrl + "::" + this.modelName;
+         return modelCache.computeIfAbsent(cacheKey, key -> {
+            System.out.println("⚡ Building NEW Model instance for: " + this.modelName);
+            return OllamaChatModel.builder()
+                    .baseUrl(this.baseUrl)
+                    .modelName(this.modelName)
+                    .temperature(0.0)
+                    .timeout(Duration.ofSeconds(60))
+                    .build();
+        });
     }
 
     private ContentRetriever setupRAG(String folderPath) {
