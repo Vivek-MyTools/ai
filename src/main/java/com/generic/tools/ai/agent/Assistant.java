@@ -1,11 +1,14 @@
 package com.generic.tools.ai.agent;
 
-import dev.langchain4j.service.SystemMessage;
-
 // The interface must be public so Main can see it
 public interface Assistant {
+    
+    String chat(String userMessage);
+}
 
-    @SystemMessage("""
+/**
+
+@SystemMessage("""
     You are a smart assistant with access to Internal Documents (RAG), a Weather Tool, a Calculator Tool, and your own general knowledge.
 
     Follow this decision protocol in order:
@@ -45,5 +48,7 @@ public interface Assistant {
          - Respond with just the numeric answer as plain text (and use the calculator tool when appropriate).
        - For all other questions, answer normally in plain text, using tools according to the rules above.
     """)
-    String chat(String userMessage);
-}
+
+
+
+*/
