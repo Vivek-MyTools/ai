@@ -1,48 +1,87 @@
 package com.generic.tools.ai.tools;
 
 import dev.langchain4j.agent.tool.Tool;
-import org.apache.commons.net.ntp.NTPUDPClient;
-import org.apache.commons.net.ntp.TimeInfo;
-
-import java.net.InetAddress;
-import java.time.Instant;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 
 public class TimeTool {
 
-    private static final String NTP_SERVER = "time.google.com";
+    private final HttpClientWrapper httpClient;
+
+    public TimeTool() {
+        this(new JavaHttpClientWrapper());
+    }
+
+    public TimeTool(HttpClientWrapper httpClient) {
+        this.httpClient = httpClient;
+    }
 
     @Tool("""
-            Provides the current real-world date and time using an internet time server (NTP).
+        Returns the current real-world date and time from external servers.
+        Usage:
+        - Use this whenever the user asks for the time, date, or day of the week.
+        - If the user asks for a specific city (e.g., 'New York'), pass that city name.
+        - If no city is specified, pass 'default'.
+        """)
+    public String getCurrentTime(String query) {
+        String timeZoneId = resolveTimeZone(query);
+        String result;
 
-            STRICT USAGE RULES:
-            1. Use this tool ONLY when the user asks for the current time, date, or "today's time".
-            2. DO NOT use this tool for historical dates, time calculations, or time conversions.
-            3. DO NOT guess or fabricate time values.
-            4. Output reflects authoritative internet time, not the system clock.
-            """)
-    public String getCurrentTime() {
-        System.out.println("   --> ⏰ Time Tool: Fetching current time from NTP server");
+        // --- ATTEMPT 1: timeapi.io ---
         try {
-            NTPUDPClient client = new NTPUDPClient();
-            client.setDefaultTimeout(3000);
-
-            InetAddress hostAddr = InetAddress.getByName(NTP_SERVER);
-            TimeInfo timeInfo = client.getTime(hostAddr);
-
-            long ntpTime = timeInfo.getMessage()
-                                   .getTransmitTimeStamp()
-                                   .getTime();
-
-            ZonedDateTime dateTime = Instant.ofEpochMilli(ntpTime)
-                                            .atZone(ZoneId.systemDefault());
-
-            return dateTime.toString();
-
+            System.out.println("DEBUG: Trying Primary Time Server (timeapi.io)...");
+            String url = "https://timeapi.io/api/Time/current/zone?timeZone=" 
+                         + URLEncoder.encode(timeZoneId, StandardCharsets.UTF_8);
+            
+            result = httpClient.get(url);
+            
+            // Basic validation
+            if (result != null && result.contains("dateTime")) {
+                return "Source: timeapi.io\nData: " + result;
+            }
         } catch (Exception e) {
-            System.err.println("TimeTool error: " + e.getMessage());
-            return "ERROR: Unable to fetch current time";
+            System.err.println("Primary server failed: " + e.getMessage());
         }
+
+        // --- ATTEMPT 2: worldtimeapi.org (Backup) ---
+        try {
+            System.out.println("DEBUG: Trying Backup Time Server (worldtimeapi.org)...");
+            String url = "http://worldtimeapi.org/api/timezone/" + timeZoneId;
+            
+            result = httpClient.get(url);
+            
+            if (result != null && result.contains("datetime")) {
+                return "Source: worldtimeapi.org\nData: " + result;
+            }
+        } catch (Exception e) {
+            System.err.println("Backup server failed: " + e.getMessage());
+        }
+
+        // --- FAILURE: No System Clock Fallback ---
+        return "Error: Unable to retrieve time. All external time servers are currently unreachable.";
+    }
+
+    private String resolveTimeZone(String query) {
+        if (query == null || query.isBlank() || query.equalsIgnoreCase("default")) {
+            return "Asia/Kolkata"; 
+        }
+
+        String q = query.toLowerCase().replace(" ", "_");
+        
+        // Map common inputs to IANA TimeZone IDs required by these APIs
+        if (q.contains("new_york")) return "America/New_York";
+        if (q.contains("london")) return "Europe/London";
+        if (q.contains("tokyo")) return "Asia/Tokyo";
+        if (q.contains("sydney")) return "Australia/Sydney";
+        if (q.contains("utc") || q.contains("gmt")) return "Etc/UTC";
+
+        // Try exact match against Java's known zones
+        for (String zone : ZoneId.getAvailableZoneIds()) {
+            if (zone.toLowerCase().contains(q)) {
+                return zone;
+            }
+        }
+        return "Asia/Kolkata"; // Default if unknown
     }
 }

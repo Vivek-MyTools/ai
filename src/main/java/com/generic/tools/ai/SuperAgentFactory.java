@@ -1,12 +1,28 @@
 package com.generic.tools.ai;
 
+
+import java.io.IOException;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.PathMatcher;
+import java.nio.file.Paths;
+import java.time.Duration;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.stream.Stream;
+
 import com.generic.tools.ai.agent.Assistant;
 import com.generic.tools.ai.helper.OllamaHelper;
-import com.generic.tools.ai.tools.CalculatorTool; // Import Default Tool
+import com.generic.tools.ai.tools.CalculatorTool;
+import com.generic.tools.ai.tools.NtpTimeTool;
 import com.generic.tools.ai.tools.RssNewsTool;
 import com.generic.tools.ai.tools.StockTool;
-import com.generic.tools.ai.tools.TimeTool;
-import com.generic.tools.ai.tools.WeatherTool;    // Import Default Tool
+import com.generic.tools.ai.tools.WeatherTool;
+import com.generic.tools.ai.tools.WebHeaderTimeTool;
 
 import dev.langchain4j.data.document.loader.FileSystemDocumentLoader;
 import dev.langchain4j.data.document.parser.TextDocumentParser;
@@ -15,25 +31,15 @@ import dev.langchain4j.data.document.splitter.DocumentSplitters;
 import dev.langchain4j.data.segment.TextSegment;
 import dev.langchain4j.memory.chat.MessageWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
+import dev.langchain4j.model.embedding.onnx.allminilml6v2.AllMiniLmL6V2EmbeddingModel;
 import dev.langchain4j.model.googleai.GoogleAiGeminiChatModel;
 import dev.langchain4j.model.ollama.OllamaChatModel;
 import dev.langchain4j.model.openai.OpenAiChatModel;
-import dev.langchain4j.model.embedding.onnx.allminilml6v2.AllMiniLmL6V2EmbeddingModel;
 import dev.langchain4j.rag.content.retriever.ContentRetriever;
 import dev.langchain4j.rag.content.retriever.EmbeddingStoreContentRetriever;
 import dev.langchain4j.service.AiServices;
 import dev.langchain4j.store.embedding.EmbeddingStoreIngestor;
 import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
-
-import java.io.IOException;
-import java.nio.file.*;
-import java.time.Duration;
-import java.util.ArrayList;
-import java.util.Collections; 
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Stream;
 
 public class SuperAgentFactory {
 
@@ -45,15 +51,15 @@ public class SuperAgentFactory {
 
     // --- DEFAULT INSTRUCTIONS ---
     public static final String DEFAULT_SYSTEM_PROMPT = """
-    You are a smart assistant with access to Internal Documents (RAG), a Weather Tool, a Calculator Tool, and your own general knowledge.
-    
-    1. Calculator: MUST state the numeric result explicitly.
-    2. Weather: Use the weather tool if asked about temperature/forecast.
-    3. RAG: Search internal documents for specific entities (Project names, Codes).
-    4. Fallback: If not found in docs, use general knowledge.
-    5. Math: Output formulas as pure LaTeX (no dollar signs).
+	   You are a smart assistant with access to Internal Documents (RAG), a Weather Tool, a Calculator Tool, and your own general knowledge.
+	    
+	    1. Calculator: MUST state the numeric result explicitly.
+	    2. Weather: Use the weather tool if asked about temperature/forecast.
+	    3. RAG: Search internal documents for specific entities (Project names, Codes).
+	    4. Fallback: If not found in docs, use general knowledge.
+	    5. Math: Output formulas as pure LaTeX (no dollar signs).
     """;
-
+   
     public SuperAgentFactory(String baseUrl, String modelName) {
         this(baseUrl, modelName, null);
     }
@@ -63,7 +69,6 @@ public class SuperAgentFactory {
         this.modelName = modelName;
         this.apiKey = apiKey;
     }
-
     /**
      * Option 1: Create Agent with Default Prompt + Extra Tools
      */
@@ -87,7 +92,8 @@ public class SuperAgentFactory {
         allTools.add(new CalculatorTool()); // Always add Calculator
         allTools.add(new WeatherTool());    // Always add Weather
         allTools.add(new StockTool());
-        allTools.add(new TimeTool());
+        //allTools.add(new NtpTimeTool());
+        allTools.add(new WebHeaderTimeTool());
         allTools.add(new RssNewsTool());
         
         if (extraTools != null) {
