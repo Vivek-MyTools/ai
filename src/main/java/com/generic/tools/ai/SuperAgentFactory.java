@@ -109,31 +109,49 @@ public class SuperAgentFactory {
                 .build();
     }
     
-    // --- HELPER 1: MODEL CREATION ---
+  // --- HELPER 1: MODEL CREATION STRATEGY ---
     private ChatLanguageModel createLanguageModel() {
-         String apiKeyForCache = (this.apiKey != null) ? this.apiKey : "env";
-         String cacheKey = this.modelName + "::" + apiKeyForCache;
-         
-         return modelCache.computeIfAbsent(cacheKey, key -> {
-            if(OllamaHelper.isOllamaAvailable() && OllamaHelper.isOllamaModel(modelName)) {
-                System.out.println("⚡ Building Local Ollama Model: " + this.modelName);
-                return OllamaChatModel.builder()
-                        .baseUrl(this.baseUrl != null ? this.baseUrl : "http://localhost:11434")
-                        .modelName(this.modelName)
-                        .temperature(0.0)
-                        .timeout(Duration.ofSeconds(60))
-                        .build();
-            } else if (modelName.toLowerCase().startsWith("gemini")) {
-                System.out.println("💎 Building Google Gemini Model: " + this.modelName);
-                String finalKey = (this.apiKey != null) ? this.apiKey : System.getenv("GOOGLE_AI_GEMINI_API_KEY");
-                return GoogleAiGeminiChatModel.builder()
-                        .apiKey(finalKey).modelName(this.modelName).temperature(0.0).build();
-            } else {
+        String openAiKey = (this.apiKey != null) ? this.apiKey : System.getenv("OPENAI_API_KEY");
+        String geminiKey = (this.apiKey != null) ? this.apiKey : System.getenv("GOOGLE_AI_GEMINI_API_KEY");
+
+        // Heuristics to determine provider
+        boolean isGemini = modelName.toLowerCase().startsWith("gemini");
+        
+        boolean isOpenAI = modelName.toLowerCase().startsWith("gpt") 
+                && !modelName.toLowerCase().contains("local")
+                && !modelName.toLowerCase().contains("oss");
+
+        String cacheKey = isOpenAI ? "openai::" + modelName : 
+                          isGemini ? "gemini::" + modelName : "ollama::" + modelName;
+
+        return modelCache.computeIfAbsent(cacheKey, key -> {
+            // Path A: OpenAI
+            if (isOpenAI) {
                 System.out.println("☁️ Building OpenAI Model: " + this.modelName);
-                String finalKey = (this.apiKey != null) ? this.apiKey : System.getenv("OPENAI_API_KEY");
+                if (openAiKey == null) throw new IllegalArgumentException("Missing OpenAI API Key");
                 return OpenAiChatModel.builder()
-                        .apiKey(finalKey).modelName(this.modelName).temperature(0.0).timeout(Duration.ofSeconds(60)).build();
+                        .apiKey(openAiKey).modelName(this.modelName)
+                        .temperature(0.0).timeout(Duration.ofSeconds(60)).build();
             }
+
+            // Path B: Gemini
+            if (isGemini) {
+                System.out.println("💎 Building Google Gemini Model: " + this.modelName);
+                if (geminiKey == null) throw new IllegalArgumentException("Missing Gemini API Key");
+                return GoogleAiGeminiChatModel.builder()
+                        .apiKey(geminiKey).modelName(this.modelName)
+                        .temperature(0.0).build();
+            }
+
+            // Path C: Ollama (Local)
+            System.out.println("⚡ Building Local Ollama Model: " + this.modelName);
+            if (!OllamaHelper.isOllamaAvailable()) {
+                 throw new RuntimeException("Ollama is not reachable at localhost:11434");
+            }
+            return OllamaChatModel.builder()
+                    .baseUrl(this.baseUrl != null ? this.baseUrl : "http://localhost:11434")
+                    .modelName(this.modelName).temperature(0.0)
+                    .timeout(Duration.ofSeconds(60)).build();
         });
     }
 
