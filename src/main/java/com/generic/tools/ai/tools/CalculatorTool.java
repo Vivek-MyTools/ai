@@ -1,11 +1,15 @@
 package com.generic.tools.ai.tools;
 
+import java.util.logging.Logger;
+
 import dev.langchain4j.agent.tool.Tool;
 import net.objecthunter.exp4j.Expression;
 import net.objecthunter.exp4j.ExpressionBuilder;
 
 public class CalculatorTool {
 
+	private static final Logger LOG = Logger.getLogger(CalculatorTool.class.getName());
+	
 	@Tool("""
 	        Performs mathematical calculations.
 	        
@@ -16,7 +20,7 @@ public class CalculatorTool {
 	        4. If the user asks "What is X?" and X is a math problem (like "5 + 5"), USE THIS TOOL.
 	        """)
     public double calculate(String expression) {
-        System.out.println("   --> 🧮 Calculator Tool: " + expression);
+        LOG.info("   --> 🧮 Calculator Tool: " + expression);
         try {
             // exp4j safely evaluates the string equation
             Expression e = new ExpressionBuilder(expression).build();

@@ -8,6 +8,8 @@ import org.mockito.Mock;
 import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
+import java.util.stream.Collectors;
 
 @ExtendWith(MockitoExtension.class)
 class WeatherToolMockTest {
@@ -18,17 +20,47 @@ class WeatherToolMockTest {
     private WeatherTool weatherTool;
 
     @BeforeEach
-    void setUp() {
-        weatherTool = new WeatherTool(httpClient); // 🔥 explicit injection
+    void setUp() throws Exception {
+        weatherTool = new WeatherTool();
+
+        // Inject the mocked httpClient using reflection
+        var field = WeatherTool.class.getDeclaredField("httpClient");
+        field.setAccessible(true);
+        field.set(weatherTool, httpClient);
     }
 
     @Test
-    void testGetWeather_OfflineSuccess() throws Exception {
+    void testGetWeather_MultipleCitiesOffline() throws Exception {
         Mockito.when(httpClient.get(Mockito.anyString()))
-               .thenReturn("London: ⛅️ +15°C");
+               .thenAnswer(invocation -> {
+                   String url = invocation.getArgument(0, String.class);
+                   if (url.contains("Delhi")) {
+                       return "Delhi: ☀️ +15°C";
+                   } else if (url.contains("Kochi")) {
+                       return "Kochi: 🌤 +28°C";
+                   } else if (url.contains("Bangalore") || url.contains("blr")) {
+                       return "Bangalore: ☀️ +22°C";
+                   } else if (url.contains("Tokyo")) {
+                       return "Tokyo: ❄️ +5°C";
+                   }
+                   return "Unknown location";
+               });
 
-        String result = weatherTool.getWeather("London");
+        List<String> cities = List.of("Kochi", "Bangalore", "Delhi", "Tokyo");
+        List<String> results = cities.stream()
+                .map(weatherTool::getWeather)
+                .collect(Collectors.toList());
 
-        Assertions.assertEquals("London: ⛅️ +15°C", result);
+        String output = "**Current temperatures**\n\n" +
+                results.stream()
+                        .map(r -> "- " + r.replaceAll("^[^:]+: ", "**$0:** "))
+                        .collect(Collectors.joining("\n"));
+
+        System.out.println(output);
+
+        Assertions.assertTrue(results.get(0).contains("Kochi"));
+        Assertions.assertTrue(results.get(1).contains("Bangalore"));
+        Assertions.assertTrue(results.get(2).contains("Delhi"));
+        Assertions.assertTrue(results.get(3).contains("Tokyo"));
     }
 }

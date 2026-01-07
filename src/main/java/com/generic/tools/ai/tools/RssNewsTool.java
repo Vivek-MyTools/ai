@@ -1,13 +1,21 @@
 package com.generic.tools.ai.tools;
 
-import dev.langchain4j.agent.tool.Tool;
 import java.io.InputStream;
 import java.net.URL;
+import java.util.logging.Logger;
+
 import javax.xml.parsers.DocumentBuilderFactory;
-import org.w3c.dom.*;
+
+import org.w3c.dom.Document;
+import org.w3c.dom.Element;
+import org.w3c.dom.NodeList;
+
+import dev.langchain4j.agent.tool.Tool;
 
 public class RssNewsTool {
 
+	private static final Logger LOG = Logger.getLogger(RssNewsTool.class.getName());
+	
     // Public RSS feed (no API key required)
     private static final String RSS_URL = "https://news.abplive.com/news/india/feed";
 
@@ -22,7 +30,7 @@ public class RssNewsTool {
             5. If the user asks for explanation or summary, call this tool FIRST, then summarize.
             """)
     public String fetchLatestHeadlines() {
-        System.out.println("   --> 📰 RSS News Tool: Fetching latest headlines");
+        LOG.info("   --> 📰 RSS News Tool: Fetching latest headlines");
 
         StringBuilder result = new StringBuilder();
         try (InputStream stream = new URL(RSS_URL).openStream()) {

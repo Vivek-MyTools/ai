@@ -1,12 +1,16 @@
 package com.generic.tools.ai.tools;
 
-import dev.langchain4j.agent.tool.Tool;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.ZoneId;
+import java.util.logging.Logger;
+
+import dev.langchain4j.agent.tool.Tool;
 
 public class TimeTool {
 
+	private static final Logger LOG = Logger.getLogger(TimeTool.class.getName());
+	
     private final HttpClientWrapper httpClient;
 
     public TimeTool() {
@@ -27,10 +31,13 @@ public class TimeTool {
     public String getCurrentTime(String query) {
         String timeZoneId = resolveTimeZone(query);
         String result;
-
+        
+        LOG.info("  --> ⏰ Time Tool: " + query);
+          
+        
         // --- ATTEMPT 1: timeapi.io ---
         try {
-            System.out.println("DEBUG: Trying Primary Time Server (timeapi.io)...");
+            LOG.info("DEBUG: Trying Primary Time Server (timeapi.io)...");
             String url = "https://timeapi.io/api/Time/current/zone?timeZone=" 
                          + URLEncoder.encode(timeZoneId, StandardCharsets.UTF_8);
             
@@ -41,12 +48,12 @@ public class TimeTool {
                 return "Source: timeapi.io\nData: " + result;
             }
         } catch (Exception e) {
-            System.err.println("Primary server failed: " + e.getMessage());
+            LOG.severe("Primary server failed: " + e.getMessage());
         }
 
         // --- ATTEMPT 2: worldtimeapi.org (Backup) ---
         try {
-            System.out.println("DEBUG: Trying Backup Time Server (worldtimeapi.org)...");
+            LOG.info("DEBUG: Trying Backup Time Server (worldtimeapi.org)...");
             String url = "http://worldtimeapi.org/api/timezone/" + timeZoneId;
             
             result = httpClient.get(url);
@@ -55,7 +62,7 @@ public class TimeTool {
                 return "Source: worldtimeapi.org\nData: " + result;
             }
         } catch (Exception e) {
-            System.err.println("Backup server failed: " + e.getMessage());
+            LOG.severe("Backup server failed: " + e.getMessage());
         }
 
         // --- FAILURE: No System Clock Fallback ---

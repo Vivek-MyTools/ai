@@ -1,21 +1,24 @@
 package com.generic.tools.ai.tools;
 
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.util.logging.Logger;
+
 import dev.langchain4j.agent.tool.Tool;
 import yahoofinance.Stock;
 import yahoofinance.YahooFinance;
 
-import java.io.IOException;
-import java.math.BigDecimal;
-
 public class StockTool {
 
+	private static final Logger LOG = Logger.getLogger(StockTool.class.getName());
+	
     @Tool("Get the price of a stock by its ticker symbol (e.g., AAPL, GOOG, MSFT).")
     public String getStockPrice(String ticker) {
         // Sanitize input (remove spaces/quotes if LLM hallucinates them)
         String symbol = ticker.replaceAll("[^a-zA-Z]", "").toUpperCase();
         
-        System.out.println("   --> [LOG] 🛠️ Accessing Tool: getStockPrice(" + symbol + ")");
-
+        LOG.info("   --> 📈 Stock Tool: getStockPrice(" + symbol + ")");
+       
         try {
             Stock stock = YahooFinance.get(symbol);
             

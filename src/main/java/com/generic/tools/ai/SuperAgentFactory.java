@@ -13,12 +13,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.logging.Logger;
 import java.util.stream.Stream;
 
 import com.generic.tools.ai.agent.Assistant;
 import com.generic.tools.ai.helper.OllamaHelper;
 import com.generic.tools.ai.tools.CalculatorTool;
-import com.generic.tools.ai.tools.NtpTimeTool;
 import com.generic.tools.ai.tools.RssNewsTool;
 import com.generic.tools.ai.tools.StockTool;
 import com.generic.tools.ai.tools.WeatherTool;
@@ -43,11 +43,17 @@ import dev.langchain4j.store.embedding.inmemory.InMemoryEmbeddingStore;
 
 public class SuperAgentFactory {
 
+	private static final Logger LOG = Logger.getLogger(SuperAgentFactory.class.getName());
+	
     private final String baseUrl;
     private final String modelName;
     private final String apiKey; 
     
     private static final Map<String, ChatLanguageModel> modelCache = new ConcurrentHashMap<>();
+    
+    static {
+    	System.setProperty("java.net.preferIPv4Stack", "true");
+    }
 
     // --- DEFAULT INSTRUCTIONS ---
     public static final String DEFAULT_SYSTEM_PROMPT = """
@@ -80,7 +86,7 @@ public class SuperAgentFactory {
      * Option 2: Create Agent with Custom Prompt + Extra Tools
      */
     public Assistant createSuperAgent(String docFolderPath, String systemInstruction, Object... extraTools) {
-        System.out.println("--- 🦸 Initializing Super Agent (" + this.modelName + ") ---");
+    	LOG.info("--- 🦸 Initializing Super Agent (" + this.modelName + ") ---");
  
         ChatLanguageModel model = createLanguageModel();
         
@@ -109,49 +115,87 @@ public class SuperAgentFactory {
                 .build();
     }
     
-  // --- HELPER 1: MODEL CREATION STRATEGY ---
+ // --- HELPER 1: MODEL CREATION STRATEGY ---
     private ChatLanguageModel createLanguageModel() {
         String openAiKey = (this.apiKey != null) ? this.apiKey : System.getenv("OPENAI_API_KEY");
         String geminiKey = (this.apiKey != null) ? this.apiKey : System.getenv("GOOGLE_AI_GEMINI_API_KEY");
 
-        // Heuristics to determine provider
+        // 1. Precise Routing Logic
         boolean isGemini = modelName.toLowerCase().startsWith("gemini");
-        
+        // "gpt" models go to OpenAI, UNLESS they are "local" or "oss"
         boolean isOpenAI = modelName.toLowerCase().startsWith("gpt") 
                 && !modelName.toLowerCase().contains("local")
                 && !modelName.toLowerCase().contains("oss");
 
+        LOG.info("Gemini => " + isGemini);
+        LOG.info("OpenAI => " + isOpenAI);
+        
+        // 2. Generate Cache Key
         String cacheKey = isOpenAI ? "openai::" + modelName : 
                           isGemini ? "gemini::" + modelName : "ollama::" + modelName;
 
         return modelCache.computeIfAbsent(cacheKey, key -> {
-            // Path A: OpenAI
+            
+            // --- PATH A: OPENAI (Official Cloud) ---
             if (isOpenAI) {
                 System.out.println("☁️ Building OpenAI Model: " + this.modelName);
                 if (openAiKey == null) throw new IllegalArgumentException("Missing OpenAI API Key");
                 return OpenAiChatModel.builder()
-                        .apiKey(openAiKey).modelName(this.modelName)
-                        .temperature(0.0).timeout(Duration.ofSeconds(60)).build();
+                        .apiKey(openAiKey)
+                        .modelName(this.modelName)
+                        .temperature(0.0)
+                        .timeout(Duration.ofSeconds(60))
+                        .build();
             }
 
-            // Path B: Gemini
+            // --- PATH B: GEMINI (Official Cloud) ---
             if (isGemini) {
                 System.out.println("💎 Building Google Gemini Model: " + this.modelName);
                 if (geminiKey == null) throw new IllegalArgumentException("Missing Gemini API Key");
                 return GoogleAiGeminiChatModel.builder()
-                        .apiKey(geminiKey).modelName(this.modelName)
-                        .temperature(0.0).build();
+                        .apiKey(geminiKey)
+                        .modelName(this.modelName)
+                        .temperature(0.0)
+                        .build();
             }
 
-            // Path C: Ollama (Local)
-            System.out.println("⚡ Building Local Ollama Model: " + this.modelName);
-            if (!OllamaHelper.isOllamaAvailable()) {
-                 throw new RuntimeException("Ollama is not reachable at localhost:11434");
+            // --- PATH C: HYBRID (Ollama First -> Cloud Fallback) ---
+            System.out.println("⚡ Intent: Hybrid Execution (Ollama Priority) for: " + this.modelName);
+
+            // 1. Try Local Ollama
+            if (OllamaHelper.isOllamaAvailable()) {
+                System.out.println("   ✅ Ollama is online. Using Local Inference.");
+                return OllamaChatModel.builder()
+                        .baseUrl("http://localhost:11434") // Force Localhost for Ollama path
+                        .modelName(this.modelName)
+                        .temperature(0.0)
+                        .timeout(Duration.ofSeconds(60))
+                        .build();
             }
-            return OllamaChatModel.builder()
-                    .baseUrl(this.baseUrl != null ? this.baseUrl : "http://localhost:11434")
-                    .modelName(this.modelName).temperature(0.0)
-                    .timeout(Duration.ofSeconds(60)).build();
+
+            // 2. Ollama is Down -> Execute User's Chosen Model on Cloud
+            System.out.println("   ⚠️ Ollama is OFFLINE. Switching to Cloud Fallback.");
+            System.out.println("   👉 Model: " + this.modelName);
+            
+            // Use the factory's baseUrl if provided (e.g., specific provider URL), else default to OpenAI
+            String cloudBaseUrl = (this.baseUrl != null && !this.baseUrl.contains("localhost")) 
+                                  ? this.baseUrl 
+                                  : "https://api.openai.com/v1"; 
+
+            System.out.println("   👉 Target Endpoint: " + cloudBaseUrl);
+
+            if (openAiKey == null) {
+                // Some local-style cloud providers (like vLLM) might not need a key, or use a dummy one.
+                // Warn but proceed if you want, or throw exception.
+                 throw new RuntimeException("Ollama is offline and no API Key found for Cloud fallback.");
+            }
+
+            return OpenAiChatModel.builder()
+                    .baseUrl(cloudBaseUrl) 
+                    .apiKey(openAiKey)
+                    .modelName(this.modelName) // 👈 STRICTLY KEEPS USER'S CHOICE
+                    .temperature(0.2)
+                    .build();
         });
     }
 

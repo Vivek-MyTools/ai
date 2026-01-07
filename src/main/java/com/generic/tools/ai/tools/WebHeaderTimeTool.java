@@ -1,14 +1,18 @@
 package com.generic.tools.ai.tools;
 
-import dev.langchain4j.agent.tool.Tool;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Date;
+import java.util.logging.Logger;
+
+import dev.langchain4j.agent.tool.Tool;
 
 public class WebHeaderTimeTool {
+	
+	private static final Logger LOG = Logger.getLogger(WebHeaderTimeTool.class.getName());
 
     private static final String TARGET_URL = "https://www.google.com";
 
@@ -20,6 +24,7 @@ public class WebHeaderTimeTool {
         """)
     public String getWebTime(String query) {
         try {
+        	LOG.info("  --> ⏰ WebHeader-Time Tool: " + query);
             // 1. Fetch the absolute UTC time from Google (Bypassing local clock)
             URL url = new URL(TARGET_URL);
             HttpURLConnection con = (HttpURLConnection) url.openConnection();
