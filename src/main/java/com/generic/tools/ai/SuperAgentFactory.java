@@ -145,6 +145,7 @@ public class SuperAgentFactory {
                         .modelName(this.modelName)
                         .temperature(0.0)
                         .timeout(Duration.ofSeconds(60))
+                        .maxRetries(0)
                         .build();
             }
 
