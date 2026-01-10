@@ -79,13 +79,14 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         lastUserIndex = chatPane.getDocument().getLength();
         append("You: ", userName);
         append(msg + "\n\n", userMsg);
+        scrollToIndex(lastUserIndex);
     }
 
-    public void addAgentMessage(String msg) {
-        scrollToIndex(lastUserIndex);
+    public void addAgentMessage(String msg) {        
         append("Agent: ", agentName);
         parseAndAppend(msg);
-        append("\n\n", agentMsg);
+        append("\n\n", agentMsg);        
+        scrollToIndex(lastUserIndex);
     }
     
     private void parseAndAppend(String text) {
@@ -159,24 +160,30 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
     
     private void scrollToIndex(int index) {
-        // 1. Wait for text insertion to finish
         SwingUtilities.invokeLater(() -> {
-            // 2. Wait for layout/wrapping calculation to finish
             SwingUtilities.invokeLater(() -> {
                 try {
-                    // Get the rectangle of the character at 'index'
+                    // 1. Get the exact Y coordinate of the User Message
                     java.awt.Rectangle rect = chatPane.modelToView(index);
                     
                     if (rect != null) {
-                        // Align the top of the view to the top of that text
-                        rect.height = jScrollPane1.getViewport().getHeight();
-                        chatPane.scrollRectToVisible(rect);
+                        // 2. Calculate the "Max Possible" scroll position
+                        // (Total Height - Window Height)
+                        int viewportHeight = jScrollPane1.getViewport().getHeight();
+                        int totalHeight = chatPane.getHeight();
+                        int maxScrollY = totalHeight - viewportHeight;
                         
-                        // Force exact alignment to top
-                        jScrollPane1.getViewport().setViewPosition(new java.awt.Point(0, rect.y));
+                        // 3. Determine target Y
+                        // We want 'rect.y', but we can't go past 'maxScrollY'
+                        int finalY = Math.min(rect.y, maxScrollY);
+                        
+                        // 4. Force the view to that position (Avoid negative values)
+                        if (finalY < 0) finalY = 0;
+                        
+                        jScrollPane1.getViewport().setViewPosition(new java.awt.Point(0, finalY));
                     }
                 } catch (BadLocationException e) {
-                    e.printStackTrace();
+                    // Ignore
                 }
             });
         });
