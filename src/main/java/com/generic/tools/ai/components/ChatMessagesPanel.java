@@ -1,18 +1,19 @@
 package com.generic.tools.ai.components;
 
-import java.awt.Font;
-import java.awt.Graphics2D;
-import java.awt.image.BufferedImage;
+import java.awt.BorderLayout;
+import java.awt.Color;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+import javax.swing.BorderFactory;
 import javax.swing.Icon;
-import javax.swing.ImageIcon;
-import javax.swing.SwingUtilities;
+import javax.swing.JPanel;
+import javax.swing.JTextPane;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
-import org.scilab.forge.jlatexmath.TeXConstants;
 import org.scilab.forge.jlatexmath.TeXFormula;
-import org.scilab.forge.jlatexmath.TeXIcon;
 
 /**
  *
@@ -20,119 +21,278 @@ import org.scilab.forge.jlatexmath.TeXIcon;
  */
 public class ChatMessagesPanel extends javax.swing.JPanel {
 
-    private Style agentName, agentMsg, userName, userMsg;
-    
-    private int lastUserIndex = 0;
-    
-   private static final java.util.regex.Pattern MATH_PATTERN = java.util.regex.Pattern.compile(
-        "\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]"
+    private int lastConversationIndex = 0;
+    // Regex constants (Same as before)
+    private static final Pattern MASTER_PATTERN = Pattern.compile(
+            "(?s)```(\\w*)\\n?(.*?)```|(\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\])"
     );
-    
+    private static final Pattern SYNTAX_PATTERN = Pattern.compile(
+            "(?<COMMENT>//.*|/\\*(?s:.*?)\\*/)|(?<STRING>\"([^\"\\\\]|\\\\.)*\")|(?<KEYWORD>\\b(public|private|protected|class|static|final|void|int|double|new|return|if|else|for|while|import)\\b)"
+    );
+
+    private Style agentName, agentMsg, userName, userMsg;
+    private Style codeStyle, keywordStyle, stringStyle, commentStyle, normalStyle;
+
     /**
      * Creates new form ChatMessagePanel
      */
     public ChatMessagesPanel() {
         initComponents();
-        initStyles();
-        setFonts();
+        javax.swing.SwingUtilities.invokeLater(this::initStyles);
     }
-    
-    private void setFonts() {
-        // --- 1. SMART FONT SELECTION ---
-        // "Nirmala UI" is built into Windows 10/11 for Hindi/Kannada/Telugu etc.
-        // "Dialog" is a Java logical font that auto-finds the right language font on Linux/Mac.
-        String fontName = "Dialog"; // Default fallback
-        java.awt.GraphicsEnvironment ge = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment();
-        String[] availableFonts = ge.getAvailableFontFamilyNames();
 
-        for (String f : availableFonts) {
-            if (f.equals("Nirmala UI")) {
-                fontName = "Nirmala UI"; // Best for Windows Indian scripts
-                break;
-            } else if (f.equals("Arial Unicode MS")) {
-                fontName = "Arial Unicode MS"; // Good fallback
+    private String getUnicodeFontName() {
+        String[] fontNames = java.awt.GraphicsEnvironment
+                                .getLocalGraphicsEnvironment()
+                                .getAvailableFontFamilyNames();
+        
+        for (String fontName : fontNames) {
+            if (fontName.equalsIgnoreCase("Nirmala UI")) {
+                return "Nirmala UI"; // ✅ Best for Hindi, Telugu, Tamil, etc.
             }
         }
-
-        Font unicodeFont = new Font(fontName, Font.PLAIN, 14);
-
-        // --- 2. APPLY FONT ---
-        chatPane.setFont(unicodeFont);
-       
+        
+        // Fallbacks
+        for (String fontName : fontNames) {
+            if (fontName.equalsIgnoreCase("Arial Unicode MS")) return "Arial Unicode MS";
+        }
+        
+        // 'Dialog' is Java's composite font that attempts to link system fonts
+        return "Dialog"; 
     }
 
     private void initStyles() {
         StyledDocument doc = chatPane.getStyledDocument();
+        
+        // 1. Detect the best font for languages
+        String mainFontName = getUnicodeFontName(); 
+        int fontSize = 14;
 
+        // --- CHAT STYLES (Use Language Font) ---
+        
         agentName = chatPane.addStyle("AgentName", null);
         StyleConstants.setBold(agentName, true);
+        StyleConstants.setFontFamily(agentName, mainFontName); // 👈 Critical Fix
+        StyleConstants.setFontSize(agentName, fontSize);
+        agentName.removeAttribute(StyleConstants.Foreground);
 
         agentMsg = chatPane.addStyle("AgentMsg", null);
+        StyleConstants.setFontFamily(agentMsg, mainFontName);  // 👈 Critical Fix
+        StyleConstants.setFontSize(agentMsg, fontSize);
+        agentMsg.removeAttribute(StyleConstants.Foreground);
 
         userName = chatPane.addStyle("UserName", null);
         StyleConstants.setBold(userName, true);
+        StyleConstants.setFontFamily(userName, mainFontName);  // 👈 Critical Fix
+        StyleConstants.setFontSize(userName, fontSize);
+        StyleConstants.setForeground(userName, new java.awt.Color(70, 130, 180));
 
         userMsg = chatPane.addStyle("UserMsg", null);
-    }
+        StyleConstants.setFontFamily(userMsg, mainFontName);   // 👈 Critical Fix
+        StyleConstants.setFontSize(userMsg, fontSize);
+        userMsg.removeAttribute(StyleConstants.Foreground);
 
-    // ===== Public API =====
-    public void addUserMessage(String msg) {
-        lastUserIndex = chatPane.getDocument().getLength();
-        append("You: ", userName);
-        append(msg + "\n\n", userMsg);
-        scrollToIndex(lastUserIndex);
-    }
+        // --- CODE STYLES (Keep Consolas for alignment) ---
+        
+        codeStyle = chatPane.addStyle("CodeBase", null);
+        StyleConstants.setFontFamily(codeStyle, "Consolas"); 
+        StyleConstants.setFontSize(codeStyle, 13);
+        
+        // Light Card Look
+        StyleConstants.setBackground(codeStyle, new java.awt.Color(245, 245, 245));
+        StyleConstants.setForeground(codeStyle, Color.BLACK);
 
-    public void addAgentMessage(String msg) {        
-        append("Agent: ", agentName);
-        parseAndAppend(msg);
-        append("\n\n", agentMsg);        
-        scrollToIndex(lastUserIndex);
+        keywordStyle = chatPane.addStyle("Keyword", codeStyle);
+        StyleConstants.setForeground(keywordStyle, new Color(0, 0, 180)); 
+        StyleConstants.setBold(keywordStyle, true);
+
+        stringStyle = chatPane.addStyle("String", codeStyle);
+        StyleConstants.setForeground(stringStyle, new Color(0, 100, 0));
+
+        commentStyle = chatPane.addStyle("Comment", codeStyle);
+        StyleConstants.setForeground(commentStyle, new Color(100, 100, 100));
+        StyleConstants.setItalic(commentStyle, true);
+
+        normalStyle = chatPane.addStyle("NormalCode", codeStyle);
+        StyleConstants.setForeground(normalStyle, Color.BLACK);
     }
     
-   private void parseAndAppend(String text) {
+    // ===== Public API =====
+    public void addUserMessage(String msg) {
+        this.lastConversationIndex = chatPane.getDocument().getLength();
+        append("You: ", userName);
+        append(msg + "\n\n", userMsg);
+       
+        snapToPosition(lastConversationIndex);
+    }
+
+    public void addAgentMessage(String msg) {
+        append("Agent: ", agentName);
+        parseAndAppend(msg);
+        append("\n\n", agentMsg);
+        snapToPosition(lastConversationIndex);
+    }
+
+   private java.awt.Component createCodeComponent(String codeContent) {
+        // A. The Inner Code Editor
+        JTextPane codePane = new JTextPane();
+        codePane.setEditable(false);
+        codePane.setFont(new java.awt.Font("Consolas", 0, 13));
+        
+        // 🎨 "Light Card" Theme (Fixed colors for visibility)
+        Color cardBg = new Color(245, 245, 245); // Light Gray
+        codePane.setBackground(cardBg);
+        codePane.setForeground(Color.BLACK);
+        
+        // B. Apply Syntax Highlighting to THIS component
+        highlightCodeInComponent(codePane, codeContent);
+
+        // C. The Wrapper Panel (Adds Border & Margins)
+        JPanel wrapper = new JPanel(new BorderLayout());
+        wrapper.setBackground(cardBg); // Match background
+        wrapper.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(1, 0, 1, 0, new Color(200, 200, 200)), // Top/Bottom Line
+            BorderFactory.createEmptyBorder(10, 10, 10, 10) // Internal Padding
+        ));
+        wrapper.add(codePane, BorderLayout.CENTER);
+        
+        // D. Prevent it from growing wider than the chat window (optional fix)
+        wrapper.setSize(new java.awt.Dimension(400, wrapper.getPreferredSize().height));
+
+        return wrapper;
+    }
+
+    /**
+     * 2. 🖌️ LOCAL HIGHLIGHTER: Runs strictly on the code component
+     */
+    private void highlightCodeInComponent(JTextPane pane, String code) {
+        StyledDocument doc = pane.getStyledDocument();
+        
+        // Define Local Styles (Fixed Light Theme)
+        Style def = pane.addStyle("Default", null);
+        StyleConstants.setForeground(def, Color.BLACK);
+
+        Style key = pane.addStyle("Keyword", null);
+        StyleConstants.setForeground(key, new Color(0, 0, 180)); // Blue
+        StyleConstants.setBold(key, true);
+
+        Style str = pane.addStyle("String", null);
+        StyleConstants.setForeground(str, new Color(0, 100, 0)); // Green
+
+        Style cmt = pane.addStyle("Comment", null);
+        StyleConstants.setForeground(cmt, new Color(100, 100, 100)); // Gray
+        StyleConstants.setItalic(cmt, true);
+
+        try {
+            // Insert raw text first
+            doc.insertString(0, code, def);
+
+            // Parse and Colorize
+            // (Using the same regex pattern from before)
+            Pattern syntaxPattern = Pattern.compile(
+                "(?<COMMENT>//.*|/\\*(?s:.*?)\\*/)|(?<STRING>\"([^\"\\\\]|\\\\.)*\")|(?<KEYWORD>\\b(public|private|protected|class|static|final|void|int|double|new|return|if|else|for|while|import)\\b)"
+            );
+            
+            Matcher m = syntaxPattern.matcher(code);
+            while (m.find()) {
+                Style s = null;
+                if (m.group("COMMENT") != null) s = cmt;
+                else if (m.group("STRING") != null) s = str;
+                else if (m.group("KEYWORD") != null) s = key;
+
+                if (s != null) {
+                    doc.setCharacterAttributes(m.start(), m.end() - m.start(), s, true);
+                }
+            }
+        } catch (BadLocationException e) { e.printStackTrace(); }
+    }
+
+    // ... (Keep your initStyles and other methods) ...
+
+    /**
+     * 3. 🧠 UPDATED PARSER: Inserts Component instead of Text
+     */
+    private void parseAndAppend(String text) {
         if (text == null || text.isEmpty()) return;
 
-        java.util.regex.Matcher m = MATH_PATTERN.matcher(text);
+        Matcher m = MASTER_PATTERN.matcher(text);
         int lastIndex = 0;
 
         while (m.find()) {
-            // 1. Text BEFORE the math
+            // A. Text BEFORE the block
             String preText = text.substring(lastIndex, m.start());
             if (!preText.isEmpty()) append(preText, agentMsg);
 
-            // 2. Extract Math
-            String match = m.group();
-            String mathContent = extractContent(match);
-            
-            // 🛑 REMOVED THE CLEANUP LINE HERE 🛑
-            // We must preserve "\\" because it means "New Line" in LaTeX matrices.
+            if (m.group(1) != null || m.group(2) != null) {
+                // --- 💻 CODE BLOCK FOUND ---
+                String content = m.group(2).trim(); // Trim newlines
+                
+                // Add newlines around the box for spacing
+                append("\n", agentMsg); 
+                
+                // 🛑 INSERT COMPONENT
+                insertComponent(createCodeComponent(content)); 
+                
+                append("\n", agentMsg);
 
-            // 3. Render
-            Icon icon = latexToIcon(mathContent);
-            if (icon != null) {
-                insertIconDirectly(icon);
             } else {
-                // If rendering still fails, it might be an unsupported command.
-                // We print the raw text so you don't lose information.
-                append(match, agentMsg);
+                // --- ➗ MATH BLOCK ---
+                String mathRaw = m.group(3);
+                String mathContent = extractMathContent(mathRaw);
+                Icon icon = latexToIcon(mathContent);
+                if (icon != null) {
+                    insertIconDirectly(icon);
+                } else {
+                    append(mathRaw, agentMsg);
+                }
             }
-
             lastIndex = m.end();
         }
 
-        // 4. Text AFTER the math
         if (lastIndex < text.length()) {
             append(text.substring(lastIndex), agentMsg);
         }
     }
 
-    // Helper to strip wrappers like \[ and \]
-    private String extractContent(String raw) {
-        if (raw.startsWith("$$")) return raw.substring(2, raw.length() - 2);
-        if (raw.startsWith("\\[")) return raw.substring(2, raw.length() - 2);
-        if (raw.startsWith("\\(")) return raw.substring(2, raw.length() - 2);
-        return raw;
+    private void insertComponent(java.awt.Component comp) {
+        try {
+            StyledDocument doc = chatPane.getStyledDocument();
+            SimpleAttributeSet attrs = new SimpleAttributeSet();
+            StyleConstants.setComponent(attrs, comp);
+            doc.insertString(doc.getLength(), " ", attrs); // Placeholder char
+        } catch (BadLocationException e) { e.printStackTrace(); }
+    }
+    /**
+     * 🖌️ THE HIGHLIGHTER ENGINE Breaks code into tokens and paints them
+     * color-by-color.
+     */
+    private void appendSyntaxHighlightedCode(String code) {
+        Matcher matcher = SYNTAX_PATTERN.matcher(code);
+        int lastIdx = 0;
+
+        while (matcher.find()) {
+            // 1. Print plain code before the token (e.g. spaces, brackets)
+            String plainText = code.substring(lastIdx, matcher.start());
+            if (!plainText.isEmpty()) {
+                append(plainText, normalStyle);
+            }
+
+            // 2. Colorize the Token
+            if (matcher.group("COMMENT") != null) {
+                append(matcher.group(), commentStyle);
+            } else if (matcher.group("STRING") != null) {
+                append(matcher.group(), stringStyle);
+            } else if (matcher.group("KEYWORD") != null) {
+                append(matcher.group(), keywordStyle);
+            }
+
+            lastIdx = matcher.end();
+        }
+
+        // 3. Print remaining code
+        if (lastIdx < code.length()) {
+            append(code.substring(lastIdx), normalStyle);
+        }
     }
 
     private void append(String text, Style style) {
@@ -142,54 +302,98 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         } catch (BadLocationException ignored) {
         }
     }
-    
-    private boolean looksLikeLatex(String text) {
-        if (text == null) return false;
-        return text.contains("\\frac") || text.contains("\\sqrt") || text.contains("$$"); 
-    }
 
-    private void addLatex(String latex) {
-        Icon icon = latexToIcon(latex);
-
-        // 🛑 FALLBACK: If rendering failed (e.g., due to '@'), just show plain text
-        if (icon == null) {
-            append("Agent: ", agentName);
-            append(latex + "\n\n", agentMsg);
-            return;
-        }
-
+    private void insertIconDirectly(Icon icon) {
         try {
             StyledDocument doc = chatPane.getStyledDocument();
-            doc.insertString(doc.getLength(), "Agent: ", agentName);
-           // chatPane.setCaretPosition(doc.getLength());
-            chatPane.insertIcon(icon);
-            doc.insertString(doc.getLength(), "\n\n", agentMsg);
-        } catch (BadLocationException ignored) {
+            SimpleAttributeSet attrs = new SimpleAttributeSet();
+            StyleConstants.setIcon(attrs, icon);
+            doc.insertString(doc.getLength(), " ", attrs);
+        } catch (BadLocationException e) {
+        }
+    }
+
+   
+
+    private boolean looksLikeLatex(String text) {
+        if (text == null) {
+            return false;
+        }
+        return text.contains("\\frac") || text.contains("\\sqrt") || text.contains("$$");
+    }
+
+    private String extractMathContent(String raw) {
+        if (raw.startsWith("$$")) {
+            return raw.substring(2, raw.length() - 2);
+        }
+        if (raw.startsWith("\\[")) {
+            return raw.substring(2, raw.length() - 2);
+        }
+        if (raw.startsWith("\\(")) {
+            return raw.substring(2, raw.length() - 2);
+        }
+        return raw;
+    }
+
+    /**
+     * LATEX COLOR STRATEGY Uses a "Mid-Tone" color that is visible on both
+     * Black and White.
+     */
+    private javax.swing.Icon latexToIcon(String latex) {
+        try {
+            if (latex == null || latex.trim().isEmpty()) {
+                return null;
+            }
+
+            TeXFormula formula = new TeXFormula(latex);
+
+            // 1. Create Icon
+            org.scilab.forge.jlatexmath.TeXIcon icon = formula.createTeXIcon(
+                    org.scilab.forge.jlatexmath.TeXConstants.STYLE_DISPLAY,
+                    18
+            );
+
+            // 2. 🎨 SET COMMON COLOR: "Medium Slate Blue" (#7B68EE)
+            // - On White Background: Clearly visible (Darker than sky blue)
+            // - On Black Background: Clearly visible (Lighter than navy blue)
+            // Alternative: new Color(0, 191, 255) (Deep Sky Blue)
+            icon.setForeground(new java.awt.Color(123, 104, 238));
+
+            // 3. Render to Image (Transparent Background)
+            java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(
+                    icon.getIconWidth(),
+                    icon.getIconHeight(),
+                    java.awt.image.BufferedImage.TYPE_INT_ARGB
+            );
+
+            java.awt.Graphics2D g2 = img.createGraphics();
+
+            // Enable Antialiasing for sharp text
+            g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
+                    java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+
+            icon.paintIcon(null, g2, 0, 0);
+            g2.dispose();
+
+            return new javax.swing.ImageIcon(img);
+        } catch (Exception e) {
+            return null;
         }
     }
     
-    private void scrollToIndex(int index) {
-        SwingUtilities.invokeLater(() -> {
-            SwingUtilities.invokeLater(() -> {
+    private void snapToPosition(int index) {
+        // Wrap in invokeLater to wait for TextPane to update its model
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            // Wrap AGAIN to wait for Components (Code Blocks) to calculate their height
+            javax.swing.SwingUtilities.invokeLater(() -> {
                 try {
-                    // 1. Get the exact Y coordinate of the User Message
+                    // 1. Get the pixel geometry of the text at 'index'
                     java.awt.Rectangle rect = chatPane.modelToView(index);
                     
                     if (rect != null) {
-                        // 2. Calculate the "Max Possible" scroll position
-                        // (Total Height - Window Height)
-                        int viewportHeight = jScrollPane1.getViewport().getHeight();
-                        int totalHeight = chatPane.getHeight();
-                        int maxScrollY = totalHeight - viewportHeight;
-                        
-                        // 3. Determine target Y
-                        // We want 'rect.y', but we can't go past 'maxScrollY'
-                        int finalY = Math.min(rect.y, maxScrollY);
-                        
-                        // 4. Force the view to that position (Avoid negative values)
-                        if (finalY < 0) finalY = 0;
-                        
-                        jScrollPane1.getViewport().setViewPosition(new java.awt.Point(0, finalY));
+                        // 2. Force the Viewport to move to that Y position
+                        // This aligns the text to the TOP of the window
+                        jScrollPane1.getViewport().setViewPosition(new java.awt.Point(0, rect.y));
                     }
                 } catch (BadLocationException e) {
                     // Ignore
@@ -197,66 +401,13 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             });
         });
     }
-    
-    private void insertIconDirectly(Icon icon) {
-        try {
-            StyledDocument doc = chatPane.getStyledDocument();
 
-            // Create a style that effectively turns a character into the icon
-            javax.swing.text.SimpleAttributeSet attrs = new javax.swing.text.SimpleAttributeSet();
-            StyleConstants.setIcon(attrs, icon);
-
-            // Insert a "space" that acts as the container for the icon
-            doc.insertString(doc.getLength(), " ", attrs);
-
-        } catch (BadLocationException e) {
-            e.printStackTrace();
-        }
-    }
-
-    private Icon latexToIcon(String latex) {
-        try {
-            if (latex == null || latex.trim().isEmpty()) return null;
-
-            TeXFormula formula = new TeXFormula(latex);
-            
-            // 1. Create the Icon
-            TeXIcon icon = formula.createTeXIcon(TeXConstants.STYLE_DISPLAY, 18);
-            
-            // 2. 🎨 CHANGE COLOR HERE
-            // Option A: Hardcoded Color (e.g., Dark Blue for Math)
-            icon.setForeground(new java.awt.Color(70, 130, 180));
-            
-            // Option B: Match the Chat Text Color (Dynamic)
-            // icon.setForeground(chatPane.getForeground());
-
-            // 3. Render to Image
-            BufferedImage img = new BufferedImage(
-                    icon.getIconWidth(),
-                    icon.getIconHeight(),
-                    BufferedImage.TYPE_INT_ARGB
-            );
-            Graphics2D g2 = img.createGraphics();
-            
-            // Optional: Improve render quality
-            g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
-                                java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-                                
-            icon.paintIcon(null, g2, 0, 0);
-            g2.dispose();
-
-            return new ImageIcon(img);
-        } catch (Exception e) {
-            return null;
-        }
-    }
-
-/**
- * This method is called from within the constructor to initialize the form.
- * WARNING: Do NOT modify this code. The content of this method is always
- * regenerated by the Form Editor.
- */
-@SuppressWarnings("unchecked")
+    /**
+     * This method is called from within the constructor to initialize the form.
+     * WARNING: Do NOT modify this code. The content of this method is always
+     * regenerated by the Form Editor.
+     */
+    @SuppressWarnings("unchecked")
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
@@ -272,7 +423,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         javax.swing.text.DefaultCaret caret = (javax.swing.text.DefaultCaret) chatPane.getCaret();
         caret.setUpdatePolicy(javax.swing.text.DefaultCaret.NEVER_UPDATE);
-        chatPane.setFont(new java.awt.Font("SansSerif", 0, 14)); // NOI18N
+        chatPane.setFont(new java.awt.Font("Dialog", 0, 14)); // NOI18N
         chatPane.setText("");
         jScrollPane1.setViewportView(chatPane);
         chatPane.setEditable(false);
