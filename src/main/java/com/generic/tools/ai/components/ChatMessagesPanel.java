@@ -24,8 +24,9 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     
     private int lastUserIndex = 0;
     
-    private static final java.util.regex.Pattern MIXED_MATH_PATTERN = 
-        java.util.regex.Pattern.compile("(?s)(.*?)(\\$?\\$|\\\\\\[|\\\\\\()(.+?)(\\$?\\$|\\\\\\]|\\\\\\))(.*)");
+   private static final java.util.regex.Pattern MATH_PATTERN = java.util.regex.Pattern.compile(
+        "\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]"
+    );
     
     /**
      * Creates new form ChatMessagePanel
@@ -89,41 +90,49 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         scrollToIndex(lastUserIndex);
     }
     
-    private void parseAndAppend(String text) {
-        if (text == null || text.isEmpty()) {
-            return;
-        }
+   private void parseAndAppend(String text) {
+        if (text == null || text.isEmpty()) return;
 
-        java.util.regex.Matcher m = MIXED_MATH_PATTERN.matcher(text);
+        java.util.regex.Matcher m = MATH_PATTERN.matcher(text);
+        int lastIndex = 0;
 
-        if (m.find()) {
-            // A. Pre-text
-            String preText = m.group(1);
-            if (!preText.isEmpty()) {
-                append(preText, agentMsg);
-            }
+        while (m.find()) {
+            // 1. Text BEFORE the math
+            String preText = text.substring(lastIndex, m.start());
+            if (!preText.isEmpty()) append(preText, agentMsg);
 
-            // B. Math
-            String mathContent = m.group(3);
-            if (mathContent.contains("\\\\")) {
-                mathContent = mathContent.replace("\\\\", "\\");
-            }
+            // 2. Extract Math
+            String match = m.group();
+            String mathContent = extractContent(match);
+            
+            // 🛑 REMOVED THE CLEANUP LINE HERE 🛑
+            // We must preserve "\\" because it means "New Line" in LaTeX matrices.
 
+            // 3. Render
             Icon icon = latexToIcon(mathContent);
             if (icon != null) {
-                // ✅ USE NEW HELPER (Does not scroll)
                 insertIconDirectly(icon);
             } else {
-                append(m.group(2) + mathContent + m.group(4), agentMsg);
+                // If rendering still fails, it might be an unsupported command.
+                // We print the raw text so you don't lose information.
+                append(match, agentMsg);
             }
 
-            // C. Remaining
-            String remaining = m.group(5);
-            parseAndAppend(remaining);
-
-        } else {
-            append(text, agentMsg);
+            lastIndex = m.end();
         }
+
+        // 4. Text AFTER the math
+        if (lastIndex < text.length()) {
+            append(text.substring(lastIndex), agentMsg);
+        }
+    }
+
+    // Helper to strip wrappers like \[ and \]
+    private String extractContent(String raw) {
+        if (raw.startsWith("$$")) return raw.substring(2, raw.length() - 2);
+        if (raw.startsWith("\\[")) return raw.substring(2, raw.length() - 2);
+        if (raw.startsWith("\\(")) return raw.substring(2, raw.length() - 2);
+        return raw;
     }
 
     private void append(String text, Style style) {
@@ -264,6 +273,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         javax.swing.text.DefaultCaret caret = (javax.swing.text.DefaultCaret) chatPane.getCaret();
         caret.setUpdatePolicy(javax.swing.text.DefaultCaret.NEVER_UPDATE);
         chatPane.setFont(new java.awt.Font("SansSerif", 0, 14)); // NOI18N
+        chatPane.setText("");
         jScrollPane1.setViewportView(chatPane);
         chatPane.setEditable(false);
 
