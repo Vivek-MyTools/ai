@@ -55,13 +55,14 @@
         <Component class="javax.swing.JComboBox" name="modelList">
           <Properties>
             <Property name="model" type="javax.swing.ComboBoxModel" editor="org.netbeans.modules.form.editors2.ComboBoxModelEditor">
-              <StringArray count="6">
+              <StringArray count="7">
                 <StringItem index="0" value="gpt-oss:20b-cloud"/>
-                <StringItem index="1" value="llama3.2"/>
-                <StringItem index="2" value="gemini-2.5-flash"/>
-                <StringItem index="3" value="gemini-2.5-flash-lite"/>
-                <StringItem index="4" value="gpt-4o"/>
-                <StringItem index="5" value="gpt-3.5-turbo"/>
+                <StringItem index="1" value="qwen3-coder:480b-cloud"/>
+                <StringItem index="2" value="llama3.2"/>
+                <StringItem index="3" value="gemini-2.5-flash"/>
+                <StringItem index="4" value="gemini-2.5-flash-lite"/>
+                <StringItem index="5" value="gpt-4o"/>
+                <StringItem index="6" value="gpt-3.5-turbo"/>
               </StringArray>
             </Property>
           </Properties>

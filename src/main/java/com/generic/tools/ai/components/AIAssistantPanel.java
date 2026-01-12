@@ -205,7 +205,7 @@ public class AIAssistantPanel extends javax.swing.JPanel {
 
         jPanel1.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
 
-        modelList.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "gpt-oss:20b-cloud", "llama3.2", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gpt-4o", "gpt-3.5-turbo" }));
+        modelList.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "gpt-oss:20b-cloud", "qwen3-coder:480b-cloud", "llama3.2", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gpt-4o", "gpt-3.5-turbo" }));
         modelList.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 modelListActionPerformed(evt);
@@ -396,6 +396,10 @@ public class AIAssistantPanel extends javax.swing.JPanel {
         if (rawMsg.contains("404")) return "Model not found or API disabled.";
         
         return rawMsg; // Return raw if we can't clean it
+    }
+    
+    public void onUpdate() {
+        messagesPanel.initStyles();
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables

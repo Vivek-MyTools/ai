@@ -2,23 +2,28 @@ package com.generic.tools.ai.components;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Font;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.JPanel;
 import javax.swing.JTextPane;
+import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
+import javax.swing.text.Element;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
+import org.scilab.forge.jlatexmath.ParseException;
 import org.scilab.forge.jlatexmath.TeXFormula;
 
 /**
  *
  * @author vivek
  */
+
 public class ChatMessagesPanel extends javax.swing.JPanel {
 
     private int lastConversationIndex = 0;
@@ -26,9 +31,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     private static final Pattern MASTER_PATTERN = Pattern.compile(
             "(?s)```(\\w*)\\n?(.*?)```|(\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\])"
     );
-    private static final Pattern SYNTAX_PATTERN = Pattern.compile(
-            "(?<COMMENT>//.*|/\\*(?s:.*?)\\*/)|(?<STRING>\"([^\"\\\\]|\\\\.)*\")|(?<KEYWORD>\\b(public|private|protected|class|static|final|void|int|double|new|return|if|else|for|while|import)\\b)"
-    );
+    
 
     private Style agentName, agentMsg, userName, userMsg;
     private Style codeStyle, keywordStyle, stringStyle, commentStyle, normalStyle;
@@ -60,8 +63,35 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         // 'Dialog' is Java's composite font that attempts to link system fonts
         return "Dialog"; 
     }
+    
+    private Color getCodeBackgroundColor() {
+        Color base = chatPane.getBackground();
+        boolean isDark = isDarkTheme(); // Use our existing helper
+        
+        // If Dark Theme: Lighten the background by 10%
+        // If Light Theme: Darken the background by 5%
+        float factor = isDark ? 1.10f : 0.95f; 
+        
+        int r = Math.min(255, (int) (base.getRed() * factor));
+        int g = Math.min(255, (int) (base.getGreen() * factor));
+        int b = Math.min(255, (int) (base.getBlue() * factor));
+        
+        return new Color(r, g, b);
+    }
+    
+    private boolean isDarkTheme() {
+        Color bg = chatPane.getBackground();
+        // Calculate brightness (0.0 to 1.0)
+        double brightness = (0.299 * bg.getRed() + 0.587 * bg.getGreen() + 0.114 * bg.getBlue()) / 255;
+        return brightness < 0.5;
+    }
 
-    private void initStyles() {
+    public void initStyles() {
+        
+        java.awt.Point savedScrollPosition = (jScrollPane1 != null && jScrollPane1.getViewport() != null) 
+                ? jScrollPane1.getViewport().getViewPosition() 
+                : new java.awt.Point(0,0);
+        
         StyledDocument doc = chatPane.getStyledDocument();
         
         // 1. Detect the best font for languages
@@ -115,6 +145,40 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         normalStyle = chatPane.addStyle("NormalCode", codeStyle);
         StyleConstants.setForeground(normalStyle, Color.BLACK);
+        
+        refreshAllCodeComponents();
+        
+        javax.swing.SwingUtilities.invokeLater(() -> {
+            if (jScrollPane1 != null && jScrollPane1.getViewport() != null) {
+                jScrollPane1.getViewport().setViewPosition(savedScrollPosition);
+            }
+        });
+    }
+    
+    private void refreshAllCodeComponents() {
+        StyledDocument doc = chatPane.getStyledDocument();
+        Element root = doc.getDefaultRootElement();
+        
+        // Loop through all elements (paragraphs/lines) in the document
+        for (int i = 0; i < root.getElementCount(); i++) {
+            Element line = root.getElement(i);
+            
+            // Loop through "leaves" (individual chunks of text or components)
+            for (int j = 0; j < line.getElementCount(); j++) {
+                Element leaf = line.getElement(j);
+                AttributeSet attrs = leaf.getAttributes();
+                
+                // Check if this chunk is a Component
+                java.awt.Component comp = StyleConstants.getComponent(attrs);
+                
+                // If it's a JPanel and it's one of OUR code blocks...
+                if (comp instanceof JPanel && ((JPanel) comp).getClientProperty("isCodeBlock") != null) {
+                    // Update it!
+                    updateCodeBlockTheme((JPanel) comp);
+                }
+            }
+        }
+        snapToPosition(lastConversationIndex);
     }
     
     // ===== Public API =====
@@ -134,61 +198,101 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
 
    private java.awt.Component createCodeComponent(String codeContent) {
+        boolean isDark = isDarkTheme();
+
+        // 🎨 1. Define Colors Based on Theme
+        Color cardBg = isDark ? new Color(40, 44, 52)     : new Color(245, 245, 245); // VS Code Dark vs Light Gray
+        Color cardFg = isDark ? new Color(220, 220, 220)  : Color.BLACK;              // White Text vs Black Text
+
         // A. The Inner Code Editor
         JTextPane codePane = new JTextPane();
         codePane.setEditable(false);
-        codePane.setFont(new java.awt.Font("Consolas", 0, 13));
-        
-        // 🎨 "Light Card" Theme (Fixed colors for visibility)
-        Color cardBg = new Color(245, 245, 245); // Light Gray
+        codePane.setFont(new Font("Consolas", Font.PLAIN, 13));
         codePane.setBackground(cardBg);
-        codePane.setForeground(Color.BLACK);
+        codePane.setForeground(cardFg);
         
-        // B. Apply Syntax Highlighting to THIS component
-        highlightCodeInComponent(codePane, codeContent);
+        // B. Apply Syntax Highlighting (Pass theme flag)
+        highlightCodeInComponent(codePane, codeContent, isDark);
 
-        // C. The Wrapper Panel (Adds Border & Margins)
         JPanel wrapper = new JPanel(new BorderLayout());
-        wrapper.setBackground(cardBg); // Match background
-        wrapper.setBorder(BorderFactory.createCompoundBorder(
-            BorderFactory.createMatteBorder(1, 0, 1, 0, new Color(200, 200, 200)), // Top/Bottom Line
-            BorderFactory.createEmptyBorder(10, 10, 10, 10) // Internal Padding
-        ));
+        
+        // 🏷️ TAGGING: Mark this panel as a "CodeBlock" so we can find it later
+        wrapper.putClientProperty("isCodeBlock", true); 
+        wrapper.putClientProperty("rawCode", codeContent); // Save raw code for re-highlighting
+
         wrapper.add(codePane, BorderLayout.CENTER);
         
-        // D. Prevent it from growing wider than the chat window (optional fix)
-        wrapper.setSize(new java.awt.Dimension(400, wrapper.getPreferredSize().height));
+        // Apply initial theme
+        updateCodeBlockTheme(wrapper); 
 
         return wrapper;
-    }
+    } 
+   
+    private void updateCodeBlockTheme(JPanel wrapper) {
+        // 1. Get Dynamic Colors
+        boolean isDark = isDarkTheme();
+        Color cardBg = getCodeBackgroundColor(); // 👈 DYNAMICALLY CALCULATED
+        Color cardFg = chatPane.getForeground(); // Matches main text color
+        
+        // Calculate a border color (Just slightly more contrast than the bg)
+        Color borderCol = isDark ? cardBg.brighter() : cardBg.darker();
 
-    /**
-     * 2. 🖌️ LOCAL HIGHLIGHTER: Runs strictly on the code component
-     */
-    private void highlightCodeInComponent(JTextPane pane, String code) {
+        // 2. Update Wrapper (The Box)
+        wrapper.setBackground(cardBg);
+        wrapper.setBorder(BorderFactory.createCompoundBorder(
+            BorderFactory.createMatteBorder(1, 0, 1, 0, borderCol), 
+            BorderFactory.createEmptyBorder(10, 10, 10, 10)
+        ));
+
+        // 3. Update Inner TextPane
+        JTextPane codePane = (JTextPane) wrapper.getComponent(0);
+        codePane.setBackground(cardBg);
+        codePane.setForeground(cardFg);
+
+        // 4. Re-Apply Syntax Highlighting
+        // We pass 'isDark' so the keywords (blue/orange) switch palettes correctly
+        String rawCode = (String) wrapper.getClientProperty("rawCode");
+        codePane.setText(""); 
+        highlightCodeInComponent(codePane, rawCode, isDark); 
+    }
+   
+    private void highlightCodeInComponent(JTextPane pane, String code, boolean isDark) {
         StyledDocument doc = pane.getStyledDocument();
         
-        // Define Local Styles (Fixed Light Theme)
+        // 🎨 2. Define Syntax Colors Based on Theme
+        Color keyColor, strColor, cmtColor;
+
+        if (isDark) {
+            // VS Code Dark Palette
+            keyColor = new Color(86, 156, 214);   // Light Blue
+            strColor = new Color(206, 145, 120);  // Soft Orange/Red
+            cmtColor = new Color(106, 153, 85);   // Muted Green
+        } else {
+            // Standard Light Palette
+            keyColor = new Color(0, 0, 180);      // Dark Blue
+            strColor = new Color(0, 100, 0);      // Dark Green
+            cmtColor = new Color(100, 100, 100);  // Gray
+        }
+
+        // Create Styles
         Style def = pane.addStyle("Default", null);
-        StyleConstants.setForeground(def, Color.BLACK);
+        StyleConstants.setForeground(def, pane.getForeground());
 
         Style key = pane.addStyle("Keyword", null);
-        StyleConstants.setForeground(key, new Color(0, 0, 180)); // Blue
+        StyleConstants.setForeground(key, keyColor);
         StyleConstants.setBold(key, true);
 
         Style str = pane.addStyle("String", null);
-        StyleConstants.setForeground(str, new Color(0, 100, 0)); // Green
+        StyleConstants.setForeground(str, strColor);
 
         Style cmt = pane.addStyle("Comment", null);
-        StyleConstants.setForeground(cmt, new Color(100, 100, 100)); // Gray
+        StyleConstants.setForeground(cmt, cmtColor);
         StyleConstants.setItalic(cmt, true);
 
         try {
-            // Insert raw text first
             doc.insertString(0, code, def);
 
-            // Parse and Colorize
-            // (Using the same regex pattern from before)
+            // Parse (Regex remains the same)
             Pattern syntaxPattern = Pattern.compile(
                 "(?<COMMENT>//.*|/\\*(?s:.*?)\\*/)|(?<STRING>\"([^\"\\\\]|\\\\.)*\")|(?<KEYWORD>\\b(public|private|protected|class|static|final|void|int|double|new|return|if|else|for|while|import)\\b)"
             );
@@ -204,10 +308,8 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                     doc.setCharacterAttributes(m.start(), m.end() - m.start(), s, true);
                 }
             }
-        } catch (BadLocationException e) { e.printStackTrace(); }
+        } catch (BadLocationException e) {}
     }
-
-    // ... (Keep your initStyles and other methods) ...
 
     /**
      * 3. 🧠 UPDATED PARSER: Inserts Component instead of Text
@@ -260,41 +362,9 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             SimpleAttributeSet attrs = new SimpleAttributeSet();
             StyleConstants.setComponent(attrs, comp);
             doc.insertString(doc.getLength(), " ", attrs); // Placeholder char
-        } catch (BadLocationException e) { e.printStackTrace(); }
+        } catch (BadLocationException e) {}
     }
-    /**
-     * 🖌️ THE HIGHLIGHTER ENGINE Breaks code into tokens and paints them
-     * color-by-color.
-     */
-    private void appendSyntaxHighlightedCode(String code) {
-        Matcher matcher = SYNTAX_PATTERN.matcher(code);
-        int lastIdx = 0;
-
-        while (matcher.find()) {
-            // 1. Print plain code before the token (e.g. spaces, brackets)
-            String plainText = code.substring(lastIdx, matcher.start());
-            if (!plainText.isEmpty()) {
-                append(plainText, normalStyle);
-            }
-
-            // 2. Colorize the Token
-            if (matcher.group("COMMENT") != null) {
-                append(matcher.group(), commentStyle);
-            } else if (matcher.group("STRING") != null) {
-                append(matcher.group(), stringStyle);
-            } else if (matcher.group("KEYWORD") != null) {
-                append(matcher.group(), keywordStyle);
-            }
-
-            lastIdx = matcher.end();
-        }
-
-        // 3. Print remaining code
-        if (lastIdx < code.length()) {
-            append(code.substring(lastIdx), normalStyle);
-        }
-    }
-
+    
     private void append(String text, Style style) {
         try {
             StyledDocument doc = chatPane.getStyledDocument();
@@ -311,15 +381,6 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             doc.insertString(doc.getLength(), " ", attrs);
         } catch (BadLocationException e) {
         }
-    }
-
-   
-
-    private boolean looksLikeLatex(String text) {
-        if (text == null) {
-            return false;
-        }
-        return text.contains("\\frac") || text.contains("\\sqrt") || text.contains("$$");
     }
 
     private String extractMathContent(String raw) {
@@ -376,7 +437,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             g2.dispose();
 
             return new javax.swing.ImageIcon(img);
-        } catch (Exception e) {
+        } catch (ParseException e) {
             return null;
         }
     }
