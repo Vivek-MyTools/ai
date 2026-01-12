@@ -2,7 +2,10 @@ package com.generic.tools.ai.components;
 
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Dimension;
 import java.awt.Font;
+import java.awt.Point;
+import java.awt.Rectangle;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
@@ -17,6 +20,7 @@ import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
 import javax.swing.text.StyledDocument;
 import org.scilab.forge.jlatexmath.ParseException;
+import org.scilab.forge.jlatexmath.TeXConstants;
 import org.scilab.forge.jlatexmath.TeXFormula;
 
 /**
@@ -27,10 +31,13 @@ import org.scilab.forge.jlatexmath.TeXFormula;
 public class ChatMessagesPanel extends javax.swing.JPanel {
 
     private int lastConversationIndex = 0;
-    // Regex constants (Same as before)
+    
     private static final Pattern MASTER_PATTERN = Pattern.compile(
-            "(?s)```(\\w*)\\n?(.*?)```|(\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\])"
+            "(?s)```(\\w*)\\n?(.*?)```|" +                                      // Group 1 & 2: Code
+            "(\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]|" + // Group 3: Display Math
+            "\\$([^$]+?)\\$)"                                                    // Group 3: Inline Math (New)
     );
+    
     
 
     private Style agentName, agentMsg, userName, userMsg;
@@ -87,53 +94,49 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
 
     public void initStyles() {
-        
-        java.awt.Point savedScrollPosition = (jScrollPane1 != null && jScrollPane1.getViewport() != null) 
-                ? jScrollPane1.getViewport().getViewPosition() 
-                : new java.awt.Point(0,0);
-        
+        // 1. ⚓ SMART ANCHOR: Find exactly which character is at the top of the screen
+        int anchorIndex = 0;
+        if (jScrollPane1 != null && jScrollPane1.getViewport() != null) {
+            Point currentPoint = jScrollPane1.getViewport().getViewPosition();
+            anchorIndex = chatPane.viewToModel(currentPoint);
+        }
+
         StyledDocument doc = chatPane.getStyledDocument();
-        
-        // 1. Detect the best font for languages
-        String mainFontName = getUnicodeFontName(); 
+        String mainFontName = getUnicodeFontName();
         int fontSize = 14;
 
-        // --- CHAT STYLES (Use Language Font) ---
-        
+        // --- CHAT STYLES ---
         agentName = chatPane.addStyle("AgentName", null);
         StyleConstants.setBold(agentName, true);
-        StyleConstants.setFontFamily(agentName, mainFontName); // 👈 Critical Fix
+        StyleConstants.setFontFamily(agentName, mainFontName);
         StyleConstants.setFontSize(agentName, fontSize);
         agentName.removeAttribute(StyleConstants.Foreground);
 
         agentMsg = chatPane.addStyle("AgentMsg", null);
-        StyleConstants.setFontFamily(agentMsg, mainFontName);  // 👈 Critical Fix
+        StyleConstants.setFontFamily(agentMsg, mainFontName);
         StyleConstants.setFontSize(agentMsg, fontSize);
         agentMsg.removeAttribute(StyleConstants.Foreground);
 
         userName = chatPane.addStyle("UserName", null);
         StyleConstants.setBold(userName, true);
-        StyleConstants.setFontFamily(userName, mainFontName);  // 👈 Critical Fix
+        StyleConstants.setFontFamily(userName, mainFontName);
         StyleConstants.setFontSize(userName, fontSize);
         StyleConstants.setForeground(userName, new java.awt.Color(70, 130, 180));
 
         userMsg = chatPane.addStyle("UserMsg", null);
-        StyleConstants.setFontFamily(userMsg, mainFontName);   // 👈 Critical Fix
+        StyleConstants.setFontFamily(userMsg, mainFontName);
         StyleConstants.setFontSize(userMsg, fontSize);
         userMsg.removeAttribute(StyleConstants.Foreground);
 
-        // --- CODE STYLES (Keep Consolas for alignment) ---
-        
+        // --- CODE STYLES ---
         codeStyle = chatPane.addStyle("CodeBase", null);
-        StyleConstants.setFontFamily(codeStyle, "Consolas"); 
+        StyleConstants.setFontFamily(codeStyle, "Consolas");
         StyleConstants.setFontSize(codeStyle, 13);
-        
-        // Light Card Look
         StyleConstants.setBackground(codeStyle, new java.awt.Color(245, 245, 245));
         StyleConstants.setForeground(codeStyle, Color.BLACK);
 
         keywordStyle = chatPane.addStyle("Keyword", codeStyle);
-        StyleConstants.setForeground(keywordStyle, new Color(0, 0, 180)); 
+        StyleConstants.setForeground(keywordStyle, new Color(0, 0, 180));
         StyleConstants.setBold(keywordStyle, true);
 
         stringStyle = chatPane.addStyle("String", codeStyle);
@@ -145,14 +148,16 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         normalStyle = chatPane.addStyle("NormalCode", codeStyle);
         StyleConstants.setForeground(normalStyle, Color.BLACK);
-        
+
+        // 2. 🔄 REFRESH COMPONENTS
         refreshAllCodeComponents();
-        
-        javax.swing.SwingUtilities.invokeLater(() -> {
-            if (jScrollPane1 != null && jScrollPane1.getViewport() != null) {
-                jScrollPane1.getViewport().setViewPosition(savedScrollPosition);
-            }
-        });
+
+        // 3. 🧲 RESTORE ANCHOR (Scroll back to where user was reading)
+        if (anchorIndex >= 0) {
+            final int restoreIdx = anchorIndex;
+            // Use snapToPosition logic to handle layout timing
+            snapToPosition(restoreIdx);
+        }
     }
     
     private void refreshAllCodeComponents() {
@@ -314,34 +319,30 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     /**
      * 3. 🧠 UPDATED PARSER: Inserts Component instead of Text
      */
-    private void parseAndAppend(String text) {
+   private void parseAndAppend(String text) {
         if (text == null || text.isEmpty()) return;
 
         Matcher m = MASTER_PATTERN.matcher(text);
         int lastIndex = 0;
 
         while (m.find()) {
-            // A. Text BEFORE the block
             String preText = text.substring(lastIndex, m.start());
             if (!preText.isEmpty()) append(preText, agentMsg);
 
             if (m.group(1) != null || m.group(2) != null) {
-                // --- 💻 CODE BLOCK FOUND ---
-                String content = m.group(2).trim(); // Trim newlines
-                
-                // Add newlines around the box for spacing
-                append("\n", agentMsg); 
-                
-                // 🛑 INSERT COMPONENT
-                insertComponent(createCodeComponent(content)); 
-                
+                // --- Code Block ---
+                String content = m.group(2).trim();
                 append("\n", agentMsg);
-
+                insertComponent(createCodeComponent(content));
+                append("\n", agentMsg);
             } else {
-                // --- ➗ MATH BLOCK ---
-                String mathRaw = m.group(3);
+                // --- Math Block ---
+                String mathRaw = m.group(3); // Handles "$x$" and "$$x$$"
                 String mathContent = extractMathContent(mathRaw);
-                Icon icon = latexToIcon(mathContent);
+                
+                // 🛑 PASS RAW WRAPPER to decide size
+                Icon icon = latexToIcon(mathRaw, mathContent); 
+                
                 if (icon != null) {
                     insertIconDirectly(icon);
                 } else {
@@ -383,53 +384,35 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         }
     }
 
-    private String extractMathContent(String raw) {
-        if (raw.startsWith("$$")) {
-            return raw.substring(2, raw.length() - 2);
-        }
-        if (raw.startsWith("\\[")) {
-            return raw.substring(2, raw.length() - 2);
-        }
-        if (raw.startsWith("\\(")) {
-            return raw.substring(2, raw.length() - 2);
-        }
+   private String extractMathContent(String raw) {
+        if (raw.startsWith("$$")) return raw.substring(2, raw.length() - 2);
+        if (raw.startsWith("\\[")) return raw.substring(2, raw.length() - 2);
+        if (raw.startsWith("\\(")) return raw.substring(2, raw.length() - 2);
+        if (raw.startsWith("$")) return raw.substring(1, raw.length() - 1); // 🆕 Strip single $
         return raw;
     }
 
-    /**
-     * LATEX COLOR STRATEGY Uses a "Mid-Tone" color that is visible on both
-     * Black and White.
-     */
-    private javax.swing.Icon latexToIcon(String latex) {
+   private javax.swing.Icon latexToIcon(String rawWrapper, String latex) {
         try {
-            if (latex == null || latex.trim().isEmpty()) {
-                return null;
-            }
+            if (latex == null || latex.trim().isEmpty()) return null;
 
             TeXFormula formula = new TeXFormula(latex);
 
-            // 1. Create Icon
-            org.scilab.forge.jlatexmath.TeXIcon icon = formula.createTeXIcon(
-                    org.scilab.forge.jlatexmath.TeXConstants.STYLE_DISPLAY,
-                    18
-            );
+            // 🧠 SMART SIZING: Check if it was $$ (Display) or $ (Inline)
+            int style = (rawWrapper.startsWith("$$") || rawWrapper.startsWith("\\["))
+                    ? TeXConstants.STYLE_DISPLAY
+                    : TeXConstants.STYLE_TEXT;
 
-            // 2. 🎨 SET COMMON COLOR: "Medium Slate Blue" (#7B68EE)
-            // - On White Background: Clearly visible (Darker than sky blue)
-            // - On Black Background: Clearly visible (Lighter than navy blue)
-            // Alternative: new Color(0, 191, 255) (Deep Sky Blue)
+            org.scilab.forge.jlatexmath.TeXIcon icon = formula.createTeXIcon(style, 18);
+
             icon.setForeground(new java.awt.Color(123, 104, 238));
 
-            // 3. Render to Image (Transparent Background)
             java.awt.image.BufferedImage img = new java.awt.image.BufferedImage(
                     icon.getIconWidth(),
                     icon.getIconHeight(),
                     java.awt.image.BufferedImage.TYPE_INT_ARGB
             );
-
             java.awt.Graphics2D g2 = img.createGraphics();
-
-            // Enable Antialiasing for sharp text
             g2.setRenderingHint(java.awt.RenderingHints.KEY_TEXT_ANTIALIASING,
                     java.awt.RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
 
@@ -443,19 +426,21 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
     
     private void snapToPosition(int index) {
-        // Wrap in invokeLater to wait for TextPane to update its model
         javax.swing.SwingUtilities.invokeLater(() -> {
-            // Wrap AGAIN to wait for Components (Code Blocks) to calculate their height
             javax.swing.SwingUtilities.invokeLater(() -> {
                 try {
-                    // 1. Get the pixel geometry of the text at 'index'
-                    java.awt.Rectangle rect = chatPane.modelToView(index);
-                    
-                    if (rect != null) {
-                        // 2. Force the Viewport to move to that Y position
-                        // This aligns the text to the TOP of the window
-                        jScrollPane1.getViewport().setViewPosition(new java.awt.Point(0, rect.y));
-                    }
+                    Rectangle rect = chatPane.modelToView(index);
+                    if (rect == null) return;
+
+                    // Calculate the maximum possible Y scroll position
+                    Dimension viewSize = jScrollPane1.getViewport().getViewSize();
+                    Dimension extentSize = jScrollPane1.getViewport().getExtentSize();
+                    int maxScrollY = viewSize.height - extentSize.height;
+
+                    // Ensure we don't try to scroll past the bottom
+                    int finalY = Math.min(rect.y, Math.max(0, maxScrollY));
+
+                    jScrollPane1.getViewport().setViewPosition(new Point(0, finalY));
                 } catch (BadLocationException e) {
                     // Ignore
                 }
