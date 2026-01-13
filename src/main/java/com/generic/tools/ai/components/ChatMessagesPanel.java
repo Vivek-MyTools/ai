@@ -111,10 +111,11 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         this.lastConversationIndex = chatPane.getDocument().getLength();
         
         // Use Factory, pass current background to calculate bubble color
-        JPanel userBubble = MessageBubbleFactory.createUserBubble(
+        JPanel userBubble = MessageBubbleFactory.createBubble(
                 msg, 
                 chatPane.getBackground(), 
-                userIcon
+                userIcon,
+                true // isUser = true
         );
 
         // Insert into document
@@ -134,7 +135,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
     // ===== Internal Logic =====
 
-    private void parseAndAppend(String text) {
+   private void parseAndAppend(String text) {
         if (text == null || text.isEmpty()) return;
 
         Matcher m = MASTER_PATTERN.matcher(text);
@@ -142,13 +143,16 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         while (m.find()) {
             String preText = text.substring(lastIndex, m.start());
-            if (!preText.isEmpty()) append(preText, agentMsg);
+            
+            // 📝 AGENT TEXT: Append directly as text
+            if (!preText.isEmpty()) {
+                append(preText, agentMsg);
+            }
 
             if (m.group(1) != null || m.group(2) != null) {
-                // --- Code Block ---
+                // --- Code Block (Always use Components) ---
                 String content = m.group(2).trim();
                 append("\n", agentMsg);
-                // Delegate to Factory
                 insertComponent(CodeBlockFactory.createCodeComponent(
                         content, 
                         chatPane.getBackground(), 
@@ -159,21 +163,23 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 // --- Math Block ---
                 String mathRaw = m.group(3); 
                 String mathContent = MathRenderer.extractMathContent(mathRaw);
-                
-                // Delegate to Renderer
                 Icon icon = MathRenderer.latexToIcon(mathRaw, mathContent); 
                 
                 if (icon != null) {
                     insertIconDirectly(icon);
                 } else {
-                    append(mathRaw, agentMsg); // Fallback to raw text
+                    append(mathRaw, agentMsg);
                 }
             }
             lastIndex = m.end();
         }
 
+        // Final Chunk
         if (lastIndex < text.length()) {
-            append(text.substring(lastIndex), agentMsg);
+            String tail = text.substring(lastIndex);
+            if (!tail.isEmpty()) {
+                append(tail, agentMsg);
+            }
         }
     }
 

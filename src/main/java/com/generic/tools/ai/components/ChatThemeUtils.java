@@ -37,11 +37,34 @@ public class ChatThemeUtils {
     }
 
     // 4. Get a "Native" looking Highlight Color (fallback if needed)
-    public static Color getUserBubbleColor() {
-        Color c = UIManager.getColor("Component.accentColor");
-        if (c == null) c = SystemColor.textHighlight;
-        if (c == null) c = new Color(0, 120, 215); 
-        return c;
+    public static Color getUserBubbleColor(Color baseBg) {
+        boolean isDark = isDarkTheme(baseBg);
+        
+        // LOGIC: Stronger contrast than the Agent
+        // Light Theme: Make it significantly darker (0.85 factor)
+        // Dark Theme: Make it significantly lighter (1.30 factor)
+        float factor = isDark ? 1.30f : 0.85f; 
+        
+        int r = Math.min(255, (int) (baseBg.getRed() * factor));
+        int g = Math.min(255, (int) (baseBg.getGreen() * factor));
+        int b = Math.min(255, (int) (baseBg.getBlue() * factor));
+        
+        return new Color(r, g, b);
+    }
+    
+    public static Color getAgentBubbleColor(Color baseBg) {
+        boolean isDark = isDarkTheme(baseBg);
+        
+        // LOGIC: 
+        // If Light Theme: Darken the background (Factor < 1.0)
+        // If Dark Theme: Lighten the background (Factor > 1.0) to create "Surface" effect
+        float factor = isDark ? 1.12f : 0.94f; // 6-12% difference is subtle but visible
+        
+        int r = Math.min(255, (int) (baseBg.getRed() * factor));
+        int g = Math.min(255, (int) (baseBg.getGreen() * factor));
+        int b = Math.min(255, (int) (baseBg.getBlue() * factor));
+        
+        return new Color(r, g, b);
     }
 
     // 5. Calculate readable text color

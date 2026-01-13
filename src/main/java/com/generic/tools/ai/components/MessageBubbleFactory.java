@@ -16,28 +16,39 @@ import javax.swing.JTextArea;
 
 public class MessageBubbleFactory {
 
-    public static JPanel createUserBubble(String text, Color parentBg, Icon userIcon) {
-        // 1. Wrapper uses GridBagLayout
+    /**
+     * Creates a bubble. 
+     * @param isUser true = Left Alignment (User), false = Right Alignment (Agent)
+     */
+    public static JPanel createBubble(String text, Color parentBg, Icon icon, boolean isUser) {
+        // 1. Wrapper
         JPanel wrapper = new JPanel(new GridBagLayout());
         wrapper.setOpaque(false);
-        wrapper.putClientProperty("isUserBubble", true); 
+        // Tag appropriately for theme updates
+        wrapper.putClientProperty("isUserBubble", isUser);
+        wrapper.putClientProperty("isAgentBubble", !isUser);
         
         GridBagConstraints gbc = new GridBagConstraints();
         
-        // 2. The Icon (Left Side - CENTERED VERTICALLY)
-        if (userIcon != null) {
-            JLabel iconLabel = new JLabel(userIcon);
-            gbc.gridx = 0;
+        // --- LAYOUT LOGIC ---
+        // IF USER (Left): Icon -> Bubble -> Empty Space
+        // IF AGENT (Right): Empty Space -> Bubble -> Icon (Optional)
+        int iconCol   = isUser ? 2 : 0;
+        int bubbleCol = 1;
+        int spaceCol  = isUser ? 0 : 2;
+        
+        // 2. The Icon
+        if (icon != null) {
+            JLabel iconLabel = new JLabel(icon);
+            gbc.gridx = iconCol;
             gbc.gridy = 0;
-            
-            // ⚓ CENTER VERTICALLY relative to the bubble height
-            gbc.anchor = GridBagConstraints.CENTER; 
-            
-            gbc.insets = new Insets(0, 0, 0, 8); // Right margin only
+            gbc.anchor = GridBagConstraints.CENTER;
+            // Add padding between icon and bubble
+            gbc.insets = isUser ? new Insets(0, 8, 0, 8) : new Insets(0, 8, 0, 8); 
             wrapper.add(iconLabel, gbc);
         }
 
-        // 3. The Bubble (Right Side)
+        // 3. The Bubble
         JPanel bubble = new RoundedPanel();
         bubble.setLayout(new BorderLayout());
         bubble.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
@@ -49,7 +60,7 @@ public class MessageBubbleFactory {
         textArea.setWrapStyleWord(true);
         textArea.setEditable(false);
         
-        // Sizing logic
+        // Dynamic Size
         int desiredWidth = Math.min(350, Math.max(100, text.length() * 8));
         textArea.setSize(new java.awt.Dimension(desiredWidth, Short.MAX_VALUE)); 
         int columns = Math.min(50, text.length()); 
@@ -58,19 +69,29 @@ public class MessageBubbleFactory {
         bubble.add(textArea, BorderLayout.CENTER);
 
         // Bubble Constraints
-        gbc.gridx = 1;
+        gbc.gridx = bubbleCol;
         gbc.gridy = 0;
-        gbc.weightx = 1.0; 
+        gbc.weightx = 0; // Do not expand width infinitely, let the "spacer" do it
         
-        // ⚓ CENTER VERTICALLY ensures the row height respects the bubble, 
-        // and the icon stays in the middle of that row.
-        gbc.anchor = GridBagConstraints.WEST; 
-        gbc.fill = GridBagConstraints.VERTICAL; // Ensure cell fills height so centering works
+        // Align bubble to Left (West) or Right (East) based on who spoke
+        gbc.anchor = isUser ? GridBagConstraints.WEST : GridBagConstraints.EAST;
         
+        gbc.fill = GridBagConstraints.VERTICAL;
         gbc.insets = new Insets(0, 0, 0, 0); 
         wrapper.add(bubble, gbc);
         
-        // 4. Apply Initial Theme
+        // 4. Spacer (Pushes content to the correct side)
+        // If User, spacer is on Right (pushes User to Left)
+        // If Agent, spacer is on Left (pushes Agent to Right)
+        JPanel spacer = new JPanel();
+        spacer.setOpaque(false);
+        gbc.gridx = spaceCol;
+        gbc.gridy = 0;
+        gbc.weightx = 1.0; // Consumes all extra space
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        wrapper.add(spacer, gbc);
+        
+        // 5. Apply Theme
         applyTheme(wrapper, parentBg);
         
         return wrapper;
@@ -78,11 +99,21 @@ public class MessageBubbleFactory {
     
     // 🔄 RE-THEMING LOGIC
     public static void applyTheme(JPanel wrapper, Color parentBg) {
+        boolean isUser = Boolean.TRUE.equals(wrapper.getClientProperty("isUserBubble"));
+        
         for (java.awt.Component comp : wrapper.getComponents()) {
             if (comp instanceof RoundedPanel) {
                 JPanel bubble = (JPanel) comp;
                 
-                Color bubbleColor = ChatThemeUtils.getBubbleBackgroundColor(parentBg);
+                // Choose color based on type
+                Color bubbleColor;
+                if (isUser) {
+                    // 👈 UPDATED: Now passes parentBg
+                    bubbleColor = ChatThemeUtils.getUserBubbleColor(parentBg); 
+                } else {
+                    bubbleColor = ChatThemeUtils.getAgentBubbleColor(parentBg); 
+                }
+                
                 bubble.setBackground(bubbleColor);
                 
                 Color textColor = ChatThemeUtils.getContrastingTextColor(bubbleColor);
