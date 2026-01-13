@@ -1,14 +1,14 @@
-/*
- * Click nbfs://nbhost/SystemFileSystem/Templates/Licenses/license-default.txt to change this license
- * Click nbfs://nbhost/SystemFileSystem/Templates/GUIForms/JFrame.java to edit this template
- */
 package com.generic.tools.ai.launcher;
+
+import com.generic.tools.lnf.theme.LnfTheme;
+import com.generic.tools.lnf.theme.ThemeChangeListener;
+import com.generic.tools.lnf.theme.ThemeHelper;
 
 /**
  *
- * @author vipa0816
+ * @author Vivekamamd Pandhare
  */
-public class AIAgent extends javax.swing.JFrame {
+public class AIAgent extends javax.swing.JFrame implements ThemeChangeListener {
     
     private static final java.util.logging.Logger logger = java.util.logging.Logger.getLogger(AIAgent.class.getName());
 
@@ -17,8 +17,18 @@ public class AIAgent extends javax.swing.JFrame {
      */
     public AIAgent() {
         initComponents();
+        LnfTheme.getInstance().setThemeName("Solar Dark");
+        LnfTheme.getInstance().addComponent(this).apply();   
+        LnfTheme.getInstance().register(this);
+        ThemeHelper.getInstance().addThemesToMenu(themes, "");
     }
 
+    
+    @Override
+    public void onLookAndFeelChanged() {
+         ai.onUpdate();
+    }
+    
     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
@@ -28,10 +38,17 @@ public class AIAgent extends javax.swing.JFrame {
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
-        aIAssistantPanel1 = new com.generic.tools.ai.components.AIAssistantPanel();
+        ai = new com.generic.tools.ai.components.AIAssistantPanel();
+        jMenuBar1 = new javax.swing.JMenuBar();
+        themes = new javax.swing.JMenu();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
-        getContentPane().add(aIAssistantPanel1, java.awt.BorderLayout.CENTER);
+        getContentPane().add(ai, java.awt.BorderLayout.CENTER);
+
+        themes.setText("Themes");
+        jMenuBar1.add(themes);
+
+        setJMenuBar(jMenuBar1);
 
         setSize(new java.awt.Dimension(784, 638));
         setLocationRelativeTo(null);
@@ -63,6 +80,10 @@ public class AIAgent extends javax.swing.JFrame {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
-    private com.generic.tools.ai.components.AIAssistantPanel aIAssistantPanel1;
+    private com.generic.tools.ai.components.AIAssistantPanel ai;
+    private javax.swing.JMenuBar jMenuBar1;
+    private javax.swing.JMenu themes;
     // End of variables declaration//GEN-END:variables
+
+    
 }
