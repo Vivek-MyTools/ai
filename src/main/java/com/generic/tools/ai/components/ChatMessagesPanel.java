@@ -8,6 +8,7 @@ import java.awt.Rectangle;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.Icon;
+import javax.swing.ImageIcon;
 import javax.swing.JPanel;
 import javax.swing.JTextPane;
 import javax.swing.text.AttributeSet;
@@ -33,7 +34,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             "\\$([^$]+?)\\$)"                                                    // Group 3: Inline Math (New)
     );
     
-    
+    private Icon userIcon;    
 
     private Style agentName, agentMsg, userName, userMsg;
     private Style codeStyle, keywordStyle, stringStyle, commentStyle, normalStyle;
@@ -43,27 +44,49 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
      */
     public ChatMessagesPanel() {
         initComponents();
+        loadIcons();
+        chatPane.setBackground(ChatThemeUtils.getCanvasBackground());
+        chatPane.setForeground(ChatThemeUtils.getCanvasForeground());
         javax.swing.SwingUtilities.invokeLater(this::initStyles);
+    }
+    
+    private void loadIcons() {
+        // Try to load from resources, or create a simple fallback
+        java.net.URL imgUrl = getClass().getResource("/chat/icons8-user-24.png");
+        if (imgUrl != null) {
+            userIcon = new ImageIcon(imgUrl);
+        } else {
+            // Fallback: A simple colored circle generated via code could go here
+            // For now, null is fine (Factory handles null safely)
+            userIcon = null; 
+        }
     }
     
     public void initStyles() {
         int anchorIndex = getAnchorIndex(); // Save scroll position
 
+        // 🎨 1. UPDATE GLOBAL COLORS (When theme changes)
+        Color bg = ChatThemeUtils.getCanvasBackground();
+        Color fg = ChatThemeUtils.getCanvasForeground();
+        
+        chatPane.setBackground(bg);
+        chatPane.setForeground(fg);
+
         StyledDocument doc = chatPane.getStyledDocument();
         String mainFontName = ChatThemeUtils.getUnicodeFontName();
         int fontSize = 14;
-
+       
         // --- DEFINE BASE STYLES ---
         agentName = chatPane.addStyle("AgentName", null);
         StyleConstants.setBold(agentName, true);
         StyleConstants.setFontFamily(agentName, mainFontName);
         StyleConstants.setFontSize(agentName, fontSize);
-        agentName.removeAttribute(StyleConstants.Foreground);
+        agentName.removeAttribute(StyleConstants.Foreground); // Inherit from Pane
 
         agentMsg = chatPane.addStyle("AgentMsg", null);
         StyleConstants.setFontFamily(agentMsg, mainFontName);
         StyleConstants.setFontSize(agentMsg, fontSize);
-        agentMsg.removeAttribute(StyleConstants.Foreground);
+        agentMsg.removeAttribute(StyleConstants.Foreground); // Inherit from Pane
 
         userName = chatPane.addStyle("UserName", null);
         StyleConstants.setBold(userName, true);
@@ -76,8 +99,8 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         StyleConstants.setFontSize(userMsg, fontSize);
         userMsg.removeAttribute(StyleConstants.Foreground);
 
-        // --- REFRESH EXISTING CODE BLOCKS ---
-        refreshCodeComponents();
+        // --- 🔄 REFRESH ALL DYNAMIC COMPONENTS (Code & Bubbles) ---
+        refreshAllComponents();
 
         if (anchorIndex >= 0) snapToPosition(anchorIndex);
     }
@@ -86,8 +109,19 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
     public void addUserMessage(String msg) {
         this.lastConversationIndex = chatPane.getDocument().getLength();
-        append("You: ", userName);
-        append(msg + "\n\n", userMsg);
+        
+        // Use Factory, pass current background to calculate bubble color
+        JPanel userBubble = MessageBubbleFactory.createUserBubble(
+                msg, 
+                chatPane.getBackground(), 
+                userIcon
+        );
+
+        // Insert into document
+        append("\n", userMsg); // Spacing before
+        insertComponent(userBubble);
+        append("\n", userMsg); // Spacing after
+        
         snapToPosition(lastConversationIndex);
     }
 
@@ -144,12 +178,16 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
 
     /**
-     * Iterates through document to find existing Code Panels and re-applies theme.
+     * Iterates through document to find existing Panels and re-applies theme.
+     * Handles both Code Blocks and User Bubbles.
      */
-    private void refreshCodeComponents() {
+    private void refreshAllComponents() {
         StyledDocument doc = chatPane.getStyledDocument();
         Element root = doc.getDefaultRootElement();
-        boolean isDark = ChatThemeUtils.isDarkTheme(chatPane.getBackground());
+        
+        Color currentBg = chatPane.getBackground();
+        Color currentFg = chatPane.getForeground();
+        boolean isDark = ChatThemeUtils.isDarkTheme(currentBg);
 
         for (int i = 0; i < root.getElementCount(); i++) {
             Element line = root.getElement(i);
@@ -158,25 +196,32 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 AttributeSet attrs = leaf.getAttributes();
                 Component comp = StyleConstants.getComponent(attrs);
                 
-                if (comp instanceof JPanel && ((JPanel) comp).getClientProperty("isCodeBlock") != null) {
-                   // We found a code block. Re-generate it or re-style it.
-                   // For simplicity here, we re-apply logic similar to factory
-                   JPanel wrapper = (JPanel) comp;
-                   JTextPane innerPane = (JTextPane) wrapper.getComponent(0);
-                   String rawCode = (String) wrapper.getClientProperty("rawCode");
-                   
-                   Color cardBg = ChatThemeUtils.getCodeBackgroundColor(chatPane.getBackground());
-                   Color borderCol = isDark ? cardBg.brighter() : cardBg.darker();
-                   
-                   wrapper.setBackground(cardBg);
-                   wrapper.setBorder(javax.swing.BorderFactory.createCompoundBorder(
-                        javax.swing.BorderFactory.createMatteBorder(1, 0, 1, 0, borderCol),
-                        javax.swing.BorderFactory.createEmptyBorder(10, 10, 10, 10)
-                   ));
-                   
-                   innerPane.setBackground(cardBg);
-                   innerPane.setForeground(chatPane.getForeground());
-                   CodeBlockFactory.highlightCode(innerPane, rawCode, isDark);
+                if (comp instanceof JPanel) {
+                    JPanel panel = (JPanel) comp;
+
+                    // CASE 1: IT IS A CODE BLOCK
+                    if (panel.getClientProperty("isCodeBlock") != null) {
+                        JTextPane innerPane = (JTextPane) panel.getComponent(0);
+                        String rawCode = (String) panel.getClientProperty("rawCode");
+                        
+                        Color codeBg = ChatThemeUtils.getCodeBackgroundColor(currentBg);
+                        Color borderCol = isDark ? codeBg.brighter() : codeBg.darker();
+                        
+                        panel.setBackground(codeBg);
+                        panel.setBorder(javax.swing.BorderFactory.createCompoundBorder(
+                             javax.swing.BorderFactory.createMatteBorder(1, 0, 1, 0, borderCol),
+                             javax.swing.BorderFactory.createEmptyBorder(10, 10, 10, 10)
+                        ));
+                        
+                        innerPane.setBackground(codeBg);
+                        innerPane.setForeground(currentFg);
+                        CodeBlockFactory.highlightCode(innerPane, rawCode, isDark);
+                    }
+                    
+                    // CASE 2: IT IS A USER BUBBLE (NEW)
+                    else if (panel.getClientProperty("isUserBubble") != null) {
+                        MessageBubbleFactory.applyTheme(panel, currentBg);
+                    }
                 }
             }
         }
@@ -234,7 +279,6 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             });
         });
     }
-
    
     /**
      * This method is called from within the constructor to initialize the form.

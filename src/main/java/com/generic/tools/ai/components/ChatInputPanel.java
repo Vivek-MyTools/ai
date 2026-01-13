@@ -148,6 +148,7 @@ public class ChatInputPanel extends javax.swing.JPanel {
 
         jPanel1.setAlignmentX(0.0F);
         jPanel1.setAlignmentY(0.0F);
+        jPanel1.setPreferredSize(new java.awt.Dimension(70, 36));
         jPanel1.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.CENTER, 0, 0));
 
         sendBtn.setIcon(new javax.swing.ImageIcon(getClass().getResource("/chat/icons8-sent-24.png"))); // NOI18N
