@@ -144,7 +144,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         StyledDocument doc = chatPane.getStyledDocument();
         String mainFontName = ChatThemeUtils.getUnicodeFontName();
-        int fontSize = 12;
+        int fontSize = 14;
 
         // --- DEFINE BASE STYLES ---
         agentName = chatPane.addStyle("AgentName", null);

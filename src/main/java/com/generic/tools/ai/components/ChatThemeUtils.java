@@ -81,19 +81,18 @@ public class ChatThemeUtils {
         String[] availableFonts = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
         Set<String> fontSet = new HashSet<>(Arrays.asList(availableFonts));
 
-        // 1. Priority: Windows Emoji Font (Best for Windows)
-        if (fontSet.contains("Segoe UI Emoji")) return "Segoe UI Emoji";
-        
-        // 2. Priority: Mac Emoji Font
-        if (fontSet.contains("Apple Color Emoji")) return "Apple Color Emoji";
-        
-        // 3. Priority: Linux Emoji Font
-        if (fontSet.contains("Noto Color Emoji")) return "Noto Color Emoji";
-        
-        // 4. Fallback: Nirmala UI (Good for Indian languages)
+        // 1. Priority: Nirmala UI (Best for Indian Languages on Windows)
+        // It usually links to Segoe UI Emoji for icons automatically.
         if (fontSet.contains("Nirmala UI")) return "Nirmala UI";
         
-        // 5. Last Resort: Logical Font (Java decides)
+        // 2. Priority: Mac/Linux Emoji/Language Fonts
+        if (fontSet.contains("Apple Color Emoji")) return "Apple Color Emoji";
+        if (fontSet.contains("Noto Sans")) return "Noto Sans"; 
+        
+        // 3. Fallback to Emoji font if Nirmala isn't present
+        if (fontSet.contains("Segoe UI Emoji")) return "Segoe UI Emoji";
+        
+        // 4. Last Resort: Logical Font (Java decides)
         return "Dialog";
     }
 
