@@ -32,13 +32,19 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     private int lastConversationIndex = 0;
 
     private static final Pattern MASTER_PATTERN = Pattern.compile(
-            "(?s)```(\\w*)\\n?(.*?)```|" +                                        // 1 & 2: Code
-            "(\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]|" +   // 3: Display Math
-            "\\$(?!\\{)([^$]+?)\\$)|" +                                             // 4: Inline Math
-            "<?(https?://[\\w\\-\\._~:/?#\\[\\]@!\\$&'\\(\\)\\*\\+,;=]+)>?|" +      // 5: Raw URLs (Swallows < >)
-            "\\[(.*?)\\]\\((https?://.*?)\\)"                                       // 6 & 7: Markdown Links
+            "(?s)```(\\w*)\\n?(.*?)```|" +                                         // 1-2: Code
+            "(\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]|" +    // 3: Display Math
+            "\\$(?!\\{)([^$]+?)\\$)|" +                                              // 4: Inline Math
+            "<?(https?://[\\w\\-\\._~:/?#\\[\\]@!\\$&'\\(\\)\\*\\+,;=]+)>?|" +       // 5: Raw URL
+            "\\[(.*?)\\]\\((https?://.*?)\\)|" +                                     // 6-7: Md Link
+            // 👇 FIXED TABLE REGEX:
+            // (?-s) ensures . does NOT match newlines.
+            // Requires:
+            // 1. Header Row: Line with a pipe
+            // 2. Separator: Line with dashes and pipes (e.g. |---| or ---|---)
+            // 3. Body: Lines with pipes
+            "((?-s)(?:(?:^|\\n)[^\\n]*\\|[^\\n]*\\n)+(?:[^\\n]*\\|[-:| ]+\\|?[^\\n]*\\n)(?:[^\\n]*\\|[^\\n]*(?:\\n|$))*)" 
     );
-
     private Icon userIcon;
 
     private Style agentName, agentMsg, userName, userMsg;
@@ -217,15 +223,14 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             if (!preText.isEmpty()) append(preText, agentMsg);
 
             if (m.group(1) != null || m.group(2) != null) {
-                // --- Code Block ---
+                // Code
                 String content = m.group(2).trim();
                 append("\n", agentMsg);
-                insertComponent(CodeBlockFactory.createCodeComponent(
-                        content, chatPane.getBackground(), chatPane.getForeground()));
+                insertComponent(CodeBlockFactory.createCodeComponent(content, chatPane.getBackground(), chatPane.getForeground()));
                 append("\n", agentMsg);
             } 
             else if (m.group(3) != null || m.group(4) != null) { 
-                // --- Math Block ---
+                // Math
                 String mathRaw = (m.group(3) != null) ? m.group(3) : m.group(4);
                 String mathContent = MathRenderer.extractMathContent(mathRaw);
                 Icon icon = MathRenderer.latexToIcon(mathRaw, mathContent); 
@@ -233,28 +238,24 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 else append(mathRaw, agentMsg);
             }
             else if (m.group(5) != null) {
-                // --- Raw URL ---
-                String url = m.group(5);
-                append(url, linkStyle); // Display URL as-is
+                // Raw URL
+                append(m.group(5), linkStyle);
             }
             else if (m.group(6) != null && m.group(7) != null) {
-                // --- 🔗 MARKDOWN LINK [Title](URL) ---
-                String title = m.group(6); // The text to show (e.g., "Python Tutorial")
-                String url = m.group(7);   // The actual link
-                
-                // We display the TITLE, but we need to store the URL so the click listener knows where to go.
-                // Since our current style only supports one attribute, we need a way to map this title -> url.
-                // A simple trick: Create a unique style for this specific link or use ClientProperty logic.
-                // For simplicity in JTextPane, we will just display the Title and use the URL as the attribute value.
-                
+                // Markdown Link
+                String title = m.group(6);
+                String url = m.group(7);
                 SimpleAttributeSet linkAttrs = new SimpleAttributeSet(linkStyle);
-                linkAttrs.addAttribute("LinkUrl", url); // Store hidden URL
-                linkAttrs.addAttribute("IsLink", true); // Tag as link
-                
-                try {
-                    StyledDocument doc = chatPane.getStyledDocument();
-                    doc.insertString(doc.getLength(), title, linkAttrs);
-                } catch (BadLocationException e) {}
+                linkAttrs.addAttribute("LinkUrl", url); 
+                linkAttrs.addAttribute("IsLink", true);
+                try { chatPane.getStyledDocument().insertString(chatPane.getDocument().getLength(), title, linkAttrs); } catch (BadLocationException e) {}
+            }
+            else if (m.group(8) != null) {
+                // 📊 TABLE DETECTED
+                String tableRaw = m.group(8);
+                append("\n", agentMsg);
+                insertComponent(TableBlockFactory.createTable(tableRaw, chatPane.getBackground()));
+                append("\n", agentMsg);
             }
             
             lastIndex = m.end();
@@ -264,7 +265,6 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             append(text.substring(lastIndex), agentMsg);
         }
     }
-    
     
     /**
      * Iterates through document to find existing Panels and re-applies theme.
