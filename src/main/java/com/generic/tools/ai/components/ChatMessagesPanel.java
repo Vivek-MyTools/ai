@@ -37,18 +37,20 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             "\\$(?!\\{)([^$]+?)\\$)|" +                                              // 4: Inline Math
             "<?(https?://[\\w\\-\\._~:/?#\\[\\]@!\\$&'\\(\\)\\*\\+,;=]+)>?|" +       // 5: Raw URL
             "\\[(.*?)\\]\\((https?://.*?)\\)|" +                                     // 6-7: Md Link
-            // 👇 FIXED TABLE REGEX:
-            // (?-s) ensures . does NOT match newlines.
-            // Requires:
-            // 1. Header Row: Line with a pipe
-            // 2. Separator: Line with dashes and pipes (e.g. |---| or ---|---)
-            // 3. Body: Lines with pipes
-            "((?-s)(?:(?:^|\\n)[^\\n]*\\|[^\\n]*\\n)+(?:[^\\n]*\\|[-:| ]+\\|?[^\\n]*\\n)(?:[^\\n]*\\|[^\\n]*(?:\\n|$))*)" 
+            // 👇 FIXED TABLE REGEX (Robust Mode):
+            // 1. Headers: Lines with pipes
+            // 2. Separator: Line with pipes and dashes
+            // 3. Body: Lines with pipes OR Empty lines (\\s*\\n) to prevent breaking on gaps
+            "((?-s)(?:(?:^|\\n)[^\\n]*\\|[^\\n]*\\n)+(?:[^\\n]*\\|[-:| ]+\\|?[^\\n]*\\n)(?:(?:[^\\n]*\\|[^\\n]*(?:\\n|$))|\\s*\\n)*)|" + // 8
+            "\\*\\*(.*?)\\*\\*|" +                                                   // 9: **Bold**
+            "(?m)^#{1,6}\\s+(.*)|" +                                                 // 10: ## Headers
+            "\\*([^\\n*]+)\\*"                                                       // 11: *Italics*
     );
     private Icon userIcon;
 
     private Style agentName, agentMsg, userName, userMsg;
-    private Style codeStyle, keywordStyle, stringStyle, commentStyle, normalStyle, linkStyle;
+    private Style codeStyle, keywordStyle, stringStyle, commentStyle, normalStyle, 
+            linkStyle, boldStyle, headerStyle, italicStyle;
 
     /**
      * Creates new form ChatMessagePanel
@@ -142,7 +144,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         StyledDocument doc = chatPane.getStyledDocument();
         String mainFontName = ChatThemeUtils.getUnicodeFontName();
-        int fontSize = 14;
+        int fontSize = 12;
 
         // --- DEFINE BASE STYLES ---
         agentName = chatPane.addStyle("AgentName", null);
@@ -175,6 +177,19 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         StyleConstants.setFontSize(linkStyle, fontSize);
         // Custom attribute to identify links in MouseListener
         linkStyle.addAttribute("IsLink", true);
+        
+        // 🔹 NEW: BOLD STYLE
+        boldStyle = chatPane.addStyle("Bold", agentMsg);
+        StyleConstants.setBold(boldStyle, true);
+
+        // 🔹 NEW: HEADER STYLE (Larger, Bold)
+        headerStyle = chatPane.addStyle("Header", agentMsg);
+        StyleConstants.setBold(headerStyle, true);
+        StyleConstants.setFontSize(headerStyle, fontSize + 2); // Bigger font
+        
+        // 🔹 NEW: ITALIC STYLE
+        italicStyle = chatPane.addStyle("Italic", agentMsg);
+        StyleConstants.setItalic(italicStyle, true);
 
         // --- 🔄 REFRESH ALL DYNAMIC COMPONENTS (Code & Bubbles) ---
         refreshAllComponents();
@@ -251,11 +266,24 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 try { chatPane.getStyledDocument().insertString(chatPane.getDocument().getLength(), title, linkAttrs); } catch (BadLocationException e) {}
             }
             else if (m.group(8) != null) {
-                // 📊 TABLE DETECTED
+                // Table
                 String tableRaw = m.group(8);
                 append("\n", agentMsg);
                 insertComponent(TableBlockFactory.createTable(tableRaw, chatPane.getBackground()));
                 append("\n", agentMsg);
+            }
+            else if (m.group(9) != null) {
+                // **Bold**
+                append(m.group(9), boldStyle);
+            }
+            else if (m.group(10) != null) {
+                // ## Header
+                String headerText = m.group(10).trim();
+                append("\n" + headerText + "\n", headerStyle);
+            }
+            else if (m.group(11) != null) {
+                // *Italics*
+                append(m.group(11), italicStyle);
             }
             
             lastIndex = m.end();
