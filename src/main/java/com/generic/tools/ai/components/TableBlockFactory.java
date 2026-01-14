@@ -1,26 +1,42 @@
 package com.generic.tools.ai.components;
 
 import java.awt.Color;
+import java.awt.Cursor;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.awt.font.TextAttribute;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
 import javax.swing.JPanel;
 import javax.swing.JTextArea;
+import javax.swing.SwingUtilities;
 
 public class TableBlockFactory {
+
+    // Regex to detect if a cell contains a URL or Markdown Link [Title](URL)
+    private static final Pattern LINK_PATTERN = Pattern.compile(
+        "<?(https?://[^\\s]+)>?|" +              // Group 1: Raw URL
+        "\\[(.*?)\\]\\((https?://.*?)\\)"        // Group 2: Title, Group 3: URL
+    );
 
     public static JPanel createTable(String markdownTable, Color parentBg) {
         JPanel tablePanel = new JPanel(new GridBagLayout());
         
-        // Tag it so we can refresh it later
+        // Tag for theme refreshing
         tablePanel.putClientProperty("isTableBlock", true); 
         
         Color borderColor = ChatThemeUtils.getTableBorderColor(parentBg);
         Color headerBg    = ChatThemeUtils.getTableHeaderColor(parentBg);
         Color cellBg      = ChatThemeUtils.getTableCellColor(parentBg);
         Color textColor   = ChatThemeUtils.getContrastingTextColor(cellBg);
+        Color linkColor   = new Color(0, 102, 204); // Standard Link Blue
 
         tablePanel.setBackground(borderColor); 
         tablePanel.setBorder(BorderFactory.createLineBorder(borderColor, 1));
@@ -41,28 +57,67 @@ public class TableBlockFactory {
             
             int col = 0;
             for (int i = startIdx; i < cells.length; i++) {
-                String cellText = cells[i].trim();
-                cellText = cellText.replace("<br>", "\n").replace("<br/>", "\n");
+                String rawText = cells[i].trim();
+                rawText = rawText.replace("<br>", "\n").replace("<br/>", "\n");
 
                 JPanel cellPanel = new JPanel(new java.awt.BorderLayout());
                 cellPanel.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
                 
                 boolean isHeader = (row == 0);
-                
-                // Tag cells so we know how to color them during refresh
                 cellPanel.putClientProperty("isTableHeader", isHeader);
                 cellPanel.putClientProperty("isTableCell", !isHeader);
-                
                 cellPanel.setBackground(isHeader ? headerBg : cellBg);
 
-                JTextArea textComp = new JTextArea(cellText);
+                // 🔗 LINK PARSING LOGIC
+                String displayText = rawText;
+                String url = null;
+                
+                Matcher m = LINK_PATTERN.matcher(rawText);
+                if (m.find()) {
+                    if (m.group(1) != null) {
+                        // Case: Raw URL
+                        url = m.group(1);
+                        displayText = url;
+                    } else if (m.group(2) != null && m.group(3) != null) {
+                        // Case: Markdown Link
+                        displayText = m.group(2);
+                        url = m.group(3);
+                    }
+                }
+
+                JTextArea textComp = new JTextArea(displayText);
                 textComp.setWrapStyleWord(true);
                 textComp.setLineWrap(true);
                 textComp.setOpaque(false);
                 textComp.setEditable(false);
-                textComp.setForeground(textColor);
-                textComp.setFont(new Font(ChatThemeUtils.getUnicodeFontName(), 
-                                          isHeader ? Font.BOLD : Font.PLAIN, 14));
+                
+                Font font = new Font(ChatThemeUtils.getUnicodeFontName(), 
+                                     isHeader ? Font.BOLD : Font.PLAIN, 14);
+
+                if (url != null) {
+                    // 🖱️ IT IS A LINK: Style & Add Listener
+                    textComp.setForeground(linkColor);
+                    textComp.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                    
+                    // Add Underline style
+                    Map<TextAttribute, Object> attributes = new HashMap<>(font.getAttributes());
+                    attributes.put(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON);
+                    textComp.setFont(font.deriveFont(attributes));
+                    
+                    final String targetUrl = url;
+                    textComp.addMouseListener(new MouseAdapter() {
+                        @Override
+                        public void mouseClicked(MouseEvent e) {
+                            if (SwingUtilities.isLeftMouseButton(e)) {
+                                ChatThemeUtils.openBrowser(targetUrl);
+                            }
+                        }
+                    });
+                } else {
+                    // Normal Text
+                    textComp.setForeground(textColor);
+                    textComp.setFont(font);
+                }
 
                 cellPanel.add(textComp, java.awt.BorderLayout.CENTER);
                 
