@@ -1,23 +1,24 @@
 package com.generic.tools.ai.components;
 
+import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Cursor;
-import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.awt.font.TextAttribute;
-import java.util.HashMap;
-import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
 import javax.swing.JPanel;
-import javax.swing.JTextArea;
+import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.SimpleAttributeSet;
+import javax.swing.text.StyleConstants;
+import javax.swing.text.StyledDocument;
 
 public class TableBlockFactory {
 
@@ -47,6 +48,7 @@ public class TableBlockFactory {
         gbc.weightx = 1.0; 
         gbc.weighty = 0.0; 
         
+        // 1. Get the font that supports Indian Languages (e.g. Nirmala UI)
         String safeFontName = ChatThemeUtils.getUnicodeFontName();
         
         int row = 0;
@@ -64,31 +66,27 @@ public class TableBlockFactory {
                 // --- 🧹 CLEANUP & FORMATTING ---
                 rawText = rawText.replace("<br>", "\n").replace("<br/>", "\n");
                 
-                // 1. Detect Markdown BOLD (**text**)
+                // Bold
                 boolean isBold = false;
                 if (rawText.startsWith("**") && rawText.endsWith("**") && rawText.length() > 4) {
                     isBold = true;
-                    // Remove wrapper
                     rawText = rawText.substring(2, rawText.length() - 2); 
                 }
-                // Strip stray bold markers inside text (e.g. "Value: **High**")
                 rawText = rawText.replace("**", "");
 
-                // 2. Detect Markdown ITALIC (*text*) 
-                // (Only if not bold, to avoid conflict)
+                // Italic
                 boolean isItalic = false;
                 if (!isBold && rawText.startsWith("*") && rawText.endsWith("*") && rawText.length() > 2) {
                     isItalic = true;
                     rawText = rawText.substring(1, rawText.length() - 1);
                 }
-                // Note: We don't blindly strip single '*' inside text as it might be math (2 * 2)
 
-                // 3. Handle Unicode
+                // Unicode Replacements
                 rawText = rawText.replace("\u2103", "°C"); 
                 rawText = rawText.replace("\u2109", "°F"); 
                 rawText = rawText.replace("\u00B0", "°");
 
-                JPanel cellPanel = new JPanel(new java.awt.BorderLayout());
+                JPanel cellPanel = new JPanel(new BorderLayout());
                 cellPanel.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
                 
                 boolean isHeader = (row == 0);
@@ -96,7 +94,7 @@ public class TableBlockFactory {
                 cellPanel.putClientProperty("isTableCell", !isHeader);
                 cellPanel.setBackground(isHeader ? headerBg : cellBg);
 
-                // Link Parsing
+                // Link Logic
                 String displayText = rawText;
                 String url = null;
                 
@@ -111,33 +109,29 @@ public class TableBlockFactory {
                     }
                 }
 
-                JTextArea textComp = new JTextArea(displayText);
-                textComp.setWrapStyleWord(true);
-                textComp.setLineWrap(true);
-                textComp.setOpaque(false);
+                JTextPane textComp = new JTextPane();
                 textComp.setEditable(false);
+                textComp.setOpaque(false);
                 
-                textComp.setColumns(0);
-                textComp.setRows(0);
-                textComp.setMinimumSize(new Dimension(10, 10));
+                // 🔧 CRITICAL FIX 1: Set Base Component Font to Dialog
+                // This acts as the "safety net" for Emojis that Nirmala UI lacks.
+                textComp.setFont(new Font(Font.DIALOG, Font.PLAIN, 14));
                 
-                // 🔧 DETERMINE FONT STYLE
-                int fontStyle = Font.PLAIN;
+                // Create Attributes for the specific text (Indian Lang support)
+                SimpleAttributeSet attrs = new SimpleAttributeSet();
+                StyleConstants.setFontFamily(attrs, safeFontName); // e.g. Nirmala UI
+                StyleConstants.setFontSize(attrs, 14);
+                
                 if (isHeader || isBold) {
-                    fontStyle = Font.BOLD;
+                    StyleConstants.setBold(attrs, true);
                 } else if (isItalic) {
-                    fontStyle = Font.ITALIC;
+                    StyleConstants.setItalic(attrs, true);
                 }
-
-                Font font = new Font(safeFontName, fontStyle, 14);
-
+                
                 if (url != null) {
-                    textComp.setForeground(linkColor);
+                    StyleConstants.setForeground(attrs, linkColor);
+                    StyleConstants.setUnderline(attrs, true);
                     textComp.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
-                    
-                    Map<TextAttribute, Object> attributes = new HashMap<>(font.getAttributes());
-                    attributes.put(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON);
-                    textComp.setFont(font.deriveFont(attributes));
                     
                     final String targetUrl = url;
                     textComp.addMouseListener(new MouseAdapter() {
@@ -149,11 +143,21 @@ public class TableBlockFactory {
                         }
                     });
                 } else {
-                    textComp.setForeground(textColor);
-                    textComp.setFont(font);
+                    StyleConstants.setForeground(attrs, textColor);
                 }
 
-                cellPanel.add(textComp, java.awt.BorderLayout.CENTER);
+                // 🔧 CRITICAL FIX 2: Use insertString instead of setText
+                // This ensures the Attributes (Nirmala UI) overlay correctly onto the Dialog base.
+                try {
+                    StyledDocument doc = textComp.getStyledDocument();
+                    doc.insertString(0, displayText, attrs);
+                    // Force paragraph attributes for alignment if needed
+                    doc.setParagraphAttributes(0, doc.getLength(), attrs, false);
+                } catch (BadLocationException ex) {
+                    textComp.setText(displayText); // Fallback
+                }
+
+                cellPanel.add(textComp, BorderLayout.CENTER);
                 
                 gbc.gridx = col;
                 gbc.gridy = row;
