@@ -12,6 +12,7 @@ import java.awt.event.MouseEvent;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.BorderFactory;
+import javax.swing.Icon;
 import javax.swing.JPanel;
 import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
@@ -25,6 +26,11 @@ public class TableBlockFactory {
     private static final Pattern LINK_PATTERN = Pattern.compile(
         "<?(https?://[^\\s]+)>?|" +              
         "\\[(.*?)\\]\\((https?://.*?)\\)"       
+    );
+
+    // 1. New Math Pattern (Matches $$...$$, \[...\], \(...\), $...$)
+    private static final Pattern MATH_PATTERN = Pattern.compile(
+            "(\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]|\\$(?!\\{)([^$]+?)\\$)"
     );
 
     public static JPanel createTable(String markdownTable, Color parentBg) {
@@ -48,7 +54,7 @@ public class TableBlockFactory {
         gbc.weightx = 1.0; 
         gbc.weighty = 0.0; 
         
-        // 1. Get the font that supports Indian Languages (e.g. Nirmala UI)
+        // Font for Indian Languages / text
         String safeFontName = ChatThemeUtils.getUnicodeFontName();
         
         int row = 0;
@@ -66,7 +72,6 @@ public class TableBlockFactory {
                 // --- 🧹 CLEANUP & FORMATTING ---
                 rawText = rawText.replace("<br>", "\n").replace("<br/>", "\n");
                 
-                // Bold
                 boolean isBold = false;
                 if (rawText.startsWith("**") && rawText.endsWith("**") && rawText.length() > 4) {
                     isBold = true;
@@ -74,14 +79,12 @@ public class TableBlockFactory {
                 }
                 rawText = rawText.replace("**", "");
 
-                // Italic
                 boolean isItalic = false;
                 if (!isBold && rawText.startsWith("*") && rawText.endsWith("*") && rawText.length() > 2) {
                     isItalic = true;
                     rawText = rawText.substring(1, rawText.length() - 1);
                 }
 
-                // Unicode Replacements
                 rawText = rawText.replace("\u2103", "°C"); 
                 rawText = rawText.replace("\u2109", "°F"); 
                 rawText = rawText.replace("\u00B0", "°");
@@ -94,7 +97,7 @@ public class TableBlockFactory {
                 cellPanel.putClientProperty("isTableCell", !isHeader);
                 cellPanel.setBackground(isHeader ? headerBg : cellBg);
 
-                // Link Logic
+                // Link Parsing
                 String displayText = rawText;
                 String url = null;
                 
@@ -113,13 +116,12 @@ public class TableBlockFactory {
                 textComp.setEditable(false);
                 textComp.setOpaque(false);
                 
-                // 🔧 CRITICAL FIX 1: Set Base Component Font to Dialog
-                // This acts as the "safety net" for Emojis that Nirmala UI lacks.
+                // Base Font (Dialog) for Emoji fallback [Preserved Fix]
                 textComp.setFont(new Font(Font.DIALOG, Font.PLAIN, 14));
                 
-                // Create Attributes for the specific text (Indian Lang support)
+                // Attributes for Specific Text Font (e.g. Nirmala UI)
                 SimpleAttributeSet attrs = new SimpleAttributeSet();
-                StyleConstants.setFontFamily(attrs, safeFontName); // e.g. Nirmala UI
+                StyleConstants.setFontFamily(attrs, safeFontName);
                 StyleConstants.setFontSize(attrs, 14);
                 
                 if (isHeader || isBold) {
@@ -146,13 +148,48 @@ public class TableBlockFactory {
                     StyleConstants.setForeground(attrs, textColor);
                 }
 
-                // 🔧 CRITICAL FIX 2: Use insertString instead of setText
-                // This ensures the Attributes (Nirmala UI) overlay correctly onto the Dialog base.
+                // --- 2. PARSE TEXT + MATH LOOP ---
                 try {
                     StyledDocument doc = textComp.getStyledDocument();
-                    doc.insertString(0, displayText, attrs);
-                    // Force paragraph attributes for alignment if needed
+                    
+                    Matcher mathMatcher = MATH_PATTERN.matcher(displayText);
+                    int lastIdx = 0;
+                    
+                    while (mathMatcher.find()) {
+                        // A. Insert plain text before the math
+                        String preText = displayText.substring(lastIdx, mathMatcher.start());
+                        if (!preText.isEmpty()) {
+                            doc.insertString(doc.getLength(), preText, attrs);
+                        }
+                        
+                        // B. Render Math to Icon
+                        String mathRaw = mathMatcher.group();
+                        String mathContent = MathRenderer.extractMathContent(mathRaw); // Uses existing Helper
+                        Icon icon = MathRenderer.latexToIcon(mathRaw, mathContent);
+                        
+                        if (icon != null) {
+                            // Important: Move caret to end before inserting icon
+                            textComp.setCaretPosition(doc.getLength());
+                            textComp.insertIcon(icon);
+                            
+                            // Insert a spacer space after icon for readability (optional)
+                            doc.insertString(doc.getLength(), " ", attrs); 
+                        } else {
+                            // Fallback: If render fails, show raw LaTeX
+                            doc.insertString(doc.getLength(), mathRaw, attrs);
+                        }
+                        
+                        lastIdx = mathMatcher.end();
+                    }
+                    
+                    // C. Insert remaining text after last math block
+                    if (lastIdx < displayText.length()) {
+                        doc.insertString(doc.getLength(), displayText.substring(lastIdx), attrs);
+                    }
+                    
+                    // Apply Paragraph Attributes for alignment
                     doc.setParagraphAttributes(0, doc.getLength(), attrs, false);
+
                 } catch (BadLocationException ex) {
                     textComp.setText(displayText); // Fallback
                 }
