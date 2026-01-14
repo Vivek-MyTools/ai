@@ -2,6 +2,7 @@ package com.generic.tools.ai.components;
 
 import java.awt.Color;
 import java.awt.Cursor;
+import java.awt.Dimension;
 import java.awt.Font;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
@@ -43,7 +44,9 @@ public class TableBlockFactory {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.BOTH;
         gbc.insets = new Insets(1, 1, 0, 0); 
-        gbc.weightx = 1.0;
+        gbc.weightx = 1.0; 
+        // 🔧 FIX: Ensure row height can expand
+        gbc.weighty = 0.0; 
         
         int row = 0;
         
@@ -57,12 +60,10 @@ public class TableBlockFactory {
             for (int i = startIdx; i < cells.length; i++) {
                 String rawText = cells[i].trim();
                 
-                // 🧹 CLEANUP: Replace special formatting and characters
+                // Cleanup
                 rawText = rawText.replace("<br>", "\n").replace("<br/>", "\n");
-                
-                // Fix "tofu" by normalizing Degree Symbols
-                rawText = rawText.replace("\u2103", "°C"); // Replace '℃' with '°C'
-                rawText = rawText.replace("\u2109", "°F"); // Replace '℉' with '°F'
+                rawText = rawText.replace("\u2103", "°C"); 
+                rawText = rawText.replace("\u2109", "°F"); 
 
                 JPanel cellPanel = new JPanel(new java.awt.BorderLayout());
                 cellPanel.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
@@ -72,7 +73,7 @@ public class TableBlockFactory {
                 cellPanel.putClientProperty("isTableCell", !isHeader);
                 cellPanel.setBackground(isHeader ? headerBg : cellBg);
 
-                // Link Parsing Logic
+                // Link Parsing
                 String displayText = rawText;
                 String url = null;
                 
@@ -93,7 +94,15 @@ public class TableBlockFactory {
                 textComp.setOpaque(false);
                 textComp.setEditable(false);
                 
-                // Ensure we use the Emoji-capable font we set up in ChatThemeUtils
+                // 🔧 FIX FLICKER + HEIGHT ISSUE:
+                // 1. setColumns(0) stops it from requesting huge width (stops flicker).
+                // 2. setRows(0) allows it to calculate natural height.
+                // 3. setMinimumSize allows it to shrink if needed.
+                // 4. REMOVED setPreferredSize to allow height to grow.
+                textComp.setColumns(0);
+                textComp.setRows(0);
+                textComp.setMinimumSize(new Dimension(10, 10));
+                
                 Font font = new Font(ChatThemeUtils.getUnicodeFontName(), 
                                      isHeader ? Font.BOLD : Font.PLAIN, 14);
 
