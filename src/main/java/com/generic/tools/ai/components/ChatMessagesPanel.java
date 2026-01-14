@@ -308,6 +308,34 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                     } // CASE 2: IT IS A USER BUBBLE (NEW)
                     else if (panel.getClientProperty("isUserBubble") != null) {
                         MessageBubbleFactory.applyTheme(panel, currentBg);
+                    }else if (panel.getClientProperty("isTableBlock") != null) {
+            
+                        // 1. Update Border/Gap Color
+                        Color borderColor = ChatThemeUtils.getTableBorderColor(currentBg);
+                        panel.setBackground(borderColor);
+                        panel.setBorder(javax.swing.BorderFactory.createLineBorder(borderColor, 1));
+
+                        // 2. Update Headers and Cells
+                        Color headerBg = ChatThemeUtils.getTableHeaderColor(currentBg);
+                        Color cellBg   = ChatThemeUtils.getTableCellColor(currentBg);
+                        Color textColor = ChatThemeUtils.getContrastingTextColor(cellBg);
+
+                        for (Component cell : panel.getComponents()) {
+                            if (cell instanceof JPanel) {
+                                JPanel cellPanel = (JPanel) cell;
+
+                                if (Boolean.TRUE.equals(cellPanel.getClientProperty("isTableHeader"))) {
+                                    cellPanel.setBackground(headerBg);
+                                } else {
+                                    cellPanel.setBackground(cellBg);
+                                }
+
+                                // Update Text Color
+                                if (cellPanel.getComponentCount() > 0 && cellPanel.getComponent(0) instanceof javax.swing.JTextArea) {
+                                     cellPanel.getComponent(0).setForeground(textColor);
+                                }
+                            }
+                        }
                     }
                 }
             }

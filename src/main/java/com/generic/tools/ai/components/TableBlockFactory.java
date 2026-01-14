@@ -13,32 +13,30 @@ public class TableBlockFactory {
 
     public static JPanel createTable(String markdownTable, Color parentBg) {
         JPanel tablePanel = new JPanel(new GridBagLayout());
-        boolean isDark = ChatThemeUtils.isDarkTheme(parentBg);
         
-        // Colors
-        Color borderColor = isDark ? new Color(80, 80, 80) : new Color(200, 200, 200);
-        Color headerBg    = isDark ? new Color(60, 60, 60) : new Color(230, 230, 230);
-        Color cellBg      = isDark ? new Color(40, 44, 52) : Color.WHITE;
-        Color textColor   = isDark ? Color.WHITE : Color.BLACK;
+        // Tag it so we can refresh it later
+        tablePanel.putClientProperty("isTableBlock", true); 
+        
+        Color borderColor = ChatThemeUtils.getTableBorderColor(parentBg);
+        Color headerBg    = ChatThemeUtils.getTableHeaderColor(parentBg);
+        Color cellBg      = ChatThemeUtils.getTableCellColor(parentBg);
+        Color textColor   = ChatThemeUtils.getContrastingTextColor(cellBg);
 
-        tablePanel.setBackground(borderColor); // The panel bg acts as border lines
+        tablePanel.setBackground(borderColor); 
         tablePanel.setBorder(BorderFactory.createLineBorder(borderColor, 1));
 
         String[] lines = markdownTable.trim().split("\\n");
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.BOTH;
-        gbc.insets = new Insets(1, 1, 0, 0); // 1px gap for grid effect
+        gbc.insets = new Insets(1, 1, 0, 0); 
         gbc.weightx = 1.0;
         
         int row = 0;
         
         for (String line : lines) {
-            // Skip separator lines like |---|
             if (line.contains("---")) continue; 
             
             String[] cells = line.trim().split("\\|");
-            
-            // Handle if line starts with | (split gives empty first string)
             int startIdx = (cells.length > 0 && cells[0].isEmpty()) ? 1 : 0;
             
             int col = 0;
@@ -50,6 +48,11 @@ public class TableBlockFactory {
                 cellPanel.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
                 
                 boolean isHeader = (row == 0);
+                
+                // Tag cells so we know how to color them during refresh
+                cellPanel.putClientProperty("isTableHeader", isHeader);
+                cellPanel.putClientProperty("isTableCell", !isHeader);
+                
                 cellPanel.setBackground(isHeader ? headerBg : cellBg);
 
                 JTextArea textComp = new JTextArea(cellText);
@@ -58,7 +61,6 @@ public class TableBlockFactory {
                 textComp.setOpaque(false);
                 textComp.setEditable(false);
                 textComp.setForeground(textColor);
-                
                 textComp.setFont(new Font(ChatThemeUtils.getUnicodeFontName(), 
                                           isHeader ? Font.BOLD : Font.PLAIN, 14));
 

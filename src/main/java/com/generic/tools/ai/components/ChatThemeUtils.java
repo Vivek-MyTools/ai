@@ -94,7 +94,41 @@ public class ChatThemeUtils {
         return getBubbleBackgroundColor(baseBg);
     }
     
-   public static void openBrowser(String url) {
+    public static Color getTableBorderColor(Color baseBg) {
+        boolean isDark = isDarkTheme(baseBg);
+        // Dark Mode: 40% Lighter than bg (visible border)
+        // Light Mode: 15% Darker than bg
+        float factor = isDark ? 1.40f : 0.85f; 
+        return shiftColor(baseBg, factor);
+    }
+
+    public static Color getTableHeaderColor(Color baseBg) {
+        boolean isDark = isDarkTheme(baseBg);
+        // Header: 20% Lighter than bg (Dark Mode) or 5% Darker (Light Mode)
+        float factor = isDark ? 1.20f : 0.95f;
+        return shiftColor(baseBg, factor);
+    }
+
+    public static Color getTableCellColor(Color baseBg) {
+        boolean isDark = isDarkTheme(baseBg);
+        // Cell: 5% Lighter than bg (Dark Mode) to stay subtle
+        // Light Mode: White (clean look)
+        if (isDark) {
+            return shiftColor(baseBg, 1.05f); 
+        } else {
+            return Color.WHITE;
+        }
+    }
+
+    // 🎨 MATH HELPER: Lightens or Darkens a color while keeping its Hue
+    private static Color shiftColor(Color c, float factor) {
+        int r = Math.min(255, Math.max(0, (int) (c.getRed() * factor)));
+        int g = Math.min(255, Math.max(0, (int) (c.getGreen() * factor)));
+        int b = Math.min(255, Math.max(0, (int) (c.getBlue() * factor)));
+        return new Color(r, g, b);
+    }
+    
+    public static void openBrowser(String url) {
         if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
             try {
                 // Handle potential trailing punctuation from markdown like ")" or "."
