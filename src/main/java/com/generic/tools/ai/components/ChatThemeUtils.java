@@ -3,8 +3,10 @@ package com.generic.tools.ai.components;
 import java.awt.Color;
 import java.awt.Desktop;
 import java.awt.GraphicsEnvironment;
-import java.awt.SystemColor;
 import java.net.URI;
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
 import javax.swing.UIManager;
 
 public class ChatThemeUtils {
@@ -76,10 +78,22 @@ public class ChatThemeUtils {
     }
     
     public static String getUnicodeFontName() {
-         String[] fontNames = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
-        for (String fontName : fontNames) {
-            if (fontName.equalsIgnoreCase("Nirmala UI")) return "Nirmala UI";
-        }
+        String[] availableFonts = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
+        Set<String> fontSet = new HashSet<>(Arrays.asList(availableFonts));
+
+        // 1. Priority: Windows Emoji Font (Best for Windows)
+        if (fontSet.contains("Segoe UI Emoji")) return "Segoe UI Emoji";
+        
+        // 2. Priority: Mac Emoji Font
+        if (fontSet.contains("Apple Color Emoji")) return "Apple Color Emoji";
+        
+        // 3. Priority: Linux Emoji Font
+        if (fontSet.contains("Noto Color Emoji")) return "Noto Color Emoji";
+        
+        // 4. Fallback: Nirmala UI (Good for Indian languages)
+        if (fontSet.contains("Nirmala UI")) return "Nirmala UI";
+        
+        // 5. Last Resort: Logical Font (Java decides)
         return "Dialog";
     }
 

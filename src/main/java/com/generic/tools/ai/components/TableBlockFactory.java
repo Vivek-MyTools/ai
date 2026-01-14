@@ -20,23 +20,21 @@ import javax.swing.SwingUtilities;
 
 public class TableBlockFactory {
 
-    // Regex to detect if a cell contains a URL or Markdown Link [Title](URL)
     private static final Pattern LINK_PATTERN = Pattern.compile(
-        "<?(https?://[^\\s]+)>?|" +              // Group 1: Raw URL
-        "\\[(.*?)\\]\\((https?://.*?)\\)"        // Group 2: Title, Group 3: URL
+        "<?(https?://[^\\s]+)>?|" +              
+        "\\[(.*?)\\]\\((https?://.*?)\\)"       
     );
 
     public static JPanel createTable(String markdownTable, Color parentBg) {
         JPanel tablePanel = new JPanel(new GridBagLayout());
         
-        // Tag for theme refreshing
         tablePanel.putClientProperty("isTableBlock", true); 
         
         Color borderColor = ChatThemeUtils.getTableBorderColor(parentBg);
         Color headerBg    = ChatThemeUtils.getTableHeaderColor(parentBg);
         Color cellBg      = ChatThemeUtils.getTableCellColor(parentBg);
         Color textColor   = ChatThemeUtils.getContrastingTextColor(cellBg);
-        Color linkColor   = new Color(0, 102, 204); // Standard Link Blue
+        Color linkColor   = new Color(0, 102, 204); 
 
         tablePanel.setBackground(borderColor); 
         tablePanel.setBorder(BorderFactory.createLineBorder(borderColor, 1));
@@ -58,7 +56,13 @@ public class TableBlockFactory {
             int col = 0;
             for (int i = startIdx; i < cells.length; i++) {
                 String rawText = cells[i].trim();
+                
+                // 🧹 CLEANUP: Replace special formatting and characters
                 rawText = rawText.replace("<br>", "\n").replace("<br/>", "\n");
+                
+                // Fix "tofu" by normalizing Degree Symbols
+                rawText = rawText.replace("\u2103", "°C"); // Replace '℃' with '°C'
+                rawText = rawText.replace("\u2109", "°F"); // Replace '℉' with '°F'
 
                 JPanel cellPanel = new JPanel(new java.awt.BorderLayout());
                 cellPanel.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
@@ -68,18 +72,16 @@ public class TableBlockFactory {
                 cellPanel.putClientProperty("isTableCell", !isHeader);
                 cellPanel.setBackground(isHeader ? headerBg : cellBg);
 
-                // 🔗 LINK PARSING LOGIC
+                // Link Parsing Logic
                 String displayText = rawText;
                 String url = null;
                 
                 Matcher m = LINK_PATTERN.matcher(rawText);
                 if (m.find()) {
                     if (m.group(1) != null) {
-                        // Case: Raw URL
                         url = m.group(1);
                         displayText = url;
                     } else if (m.group(2) != null && m.group(3) != null) {
-                        // Case: Markdown Link
                         displayText = m.group(2);
                         url = m.group(3);
                     }
@@ -91,15 +93,14 @@ public class TableBlockFactory {
                 textComp.setOpaque(false);
                 textComp.setEditable(false);
                 
+                // Ensure we use the Emoji-capable font we set up in ChatThemeUtils
                 Font font = new Font(ChatThemeUtils.getUnicodeFontName(), 
                                      isHeader ? Font.BOLD : Font.PLAIN, 14);
 
                 if (url != null) {
-                    // 🖱️ IT IS A LINK: Style & Add Listener
                     textComp.setForeground(linkColor);
                     textComp.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
                     
-                    // Add Underline style
                     Map<TextAttribute, Object> attributes = new HashMap<>(font.getAttributes());
                     attributes.put(TextAttribute.UNDERLINE, TextAttribute.UNDERLINE_ON);
                     textComp.setFont(font.deriveFont(attributes));
@@ -114,7 +115,6 @@ public class TableBlockFactory {
                         }
                     });
                 } else {
-                    // Normal Text
                     textComp.setForeground(textColor);
                     textComp.setFont(font);
                 }
