@@ -45,7 +45,6 @@ public class TableBlockFactory {
         gbc.fill = GridBagConstraints.BOTH;
         gbc.insets = new Insets(1, 1, 0, 0); 
         gbc.weightx = 1.0; 
-        // 🔧 FIX: Ensure row height can expand
         gbc.weighty = 0.0; 
         
         int row = 0;
@@ -60,10 +59,15 @@ public class TableBlockFactory {
             for (int i = startIdx; i < cells.length; i++) {
                 String rawText = cells[i].trim();
                 
-                // Cleanup
+                // --- 🧹 CLEANUP ---
                 rawText = rawText.replace("<br>", "\n").replace("<br/>", "\n");
+                
+                // 1. Handle "Degree Celsius" single char
                 rawText = rawText.replace("\u2103", "°C"); 
+                // 2. Handle "Degree Fahrenheit" single char
                 rawText = rawText.replace("\u2109", "°F"); 
+                // 3. Handle standard Degree symbol explicitly (ensure it's clean)
+                rawText = rawText.replace("\u00B0", "°");
 
                 JPanel cellPanel = new JPanel(new java.awt.BorderLayout());
                 cellPanel.setBorder(BorderFactory.createEmptyBorder(8, 10, 8, 10));
@@ -94,16 +98,13 @@ public class TableBlockFactory {
                 textComp.setOpaque(false);
                 textComp.setEditable(false);
                 
-                // 🔧 FIX FLICKER + HEIGHT ISSUE:
-                // 1. setColumns(0) stops it from requesting huge width (stops flicker).
-                // 2. setRows(0) allows it to calculate natural height.
-                // 3. setMinimumSize allows it to shrink if needed.
-                // 4. REMOVED setPreferredSize to allow height to grow.
                 textComp.setColumns(0);
                 textComp.setRows(0);
                 textComp.setMinimumSize(new Dimension(10, 10));
                 
-                Font font = new Font(ChatThemeUtils.getUnicodeFontName(), 
+                // 🔧 FIX: Use SANS_SERIF (Logical Font) instead of specific font name.
+                // This forces Java to pick the system's best font for symbols/UI.
+                Font font = new Font(Font.SANS_SERIF, 
                                      isHeader ? Font.BOLD : Font.PLAIN, 14);
 
                 if (url != null) {
