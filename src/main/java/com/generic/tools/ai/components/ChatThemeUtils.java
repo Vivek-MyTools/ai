@@ -1,8 +1,10 @@
 package com.generic.tools.ai.components;
 
 import java.awt.Color;
+import java.awt.Desktop;
 import java.awt.GraphicsEnvironment;
 import java.awt.SystemColor;
+import java.net.URI;
 import javax.swing.UIManager;
 
 public class ChatThemeUtils {
@@ -90,5 +92,20 @@ public class ChatThemeUtils {
         // We can reuse the bubble logic or keep it distinct. 
         // Using the same logic ensures consistency.
         return getBubbleBackgroundColor(baseBg);
+    }
+    
+   public static void openBrowser(String url) {
+        if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
+            try {
+                // Handle potential trailing punctuation from markdown like ")" or "."
+                String cleanUrl = url;
+                if (cleanUrl.endsWith(")") || cleanUrl.endsWith(".") || cleanUrl.endsWith(",")) {
+                    cleanUrl = cleanUrl.substring(0, cleanUrl.length() - 1);
+                }
+                Desktop.getDesktop().browse(new URI(cleanUrl));
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
     }
 }

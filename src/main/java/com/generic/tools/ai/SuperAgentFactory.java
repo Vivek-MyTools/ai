@@ -18,6 +18,7 @@ import java.util.stream.Stream;
 import com.generic.tools.ai.agent.Assistant;
 import com.generic.tools.ai.helper.OllamaHelper;
 import com.generic.tools.ai.tools.CalculatorTool;
+import com.generic.tools.ai.tools.ClimateInfoTool;
 import com.generic.tools.ai.tools.RssNewsTool;
 import com.generic.tools.ai.tools.StockTool;
 import com.generic.tools.ai.tools.WeatherTool;
@@ -105,7 +106,7 @@ public class SuperAgentFactory {
         // --- MERGE TOOLS ---
         List<Object> allTools = new ArrayList<>();
         allTools.add(new CalculatorTool()); 
-        allTools.add(new WeatherTool());    
+        allTools.add(new ClimateInfoTool());    
         allTools.add(new StockTool());
         allTools.add(new WebHeaderTimeTool());
         allTools.add(new RssNewsTool());

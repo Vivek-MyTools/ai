@@ -2,15 +2,19 @@ package com.generic.tools.ai.components;
 
 import java.awt.Color;
 import java.awt.Component;
+import java.awt.Cursor;
 import java.awt.Dimension;
 import java.awt.Point;
 import java.awt.Rectangle;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JPanel;
 import javax.swing.JTextPane;
+import javax.swing.SwingUtilities;
 import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.Element;
@@ -23,21 +27,22 @@ import javax.swing.text.StyledDocument;
  *
  * @author vivek
  */
-
 public class ChatMessagesPanel extends javax.swing.JPanel {
 
     private int lastConversationIndex = 0;
-    
+
     private static final Pattern MASTER_PATTERN = Pattern.compile(
-            "(?s)```(\\w*)\\n?(.*?)```|" +                                      // Group 1 & 2: Code
-            "(\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]|" + // Group 3: Display Math
-            "\\$([^$]+?)\\$)"                                                    // Group 3: Inline Math (New)
+            "(?s)```(\\w*)\\n?(.*?)```|" +                                        // 1 & 2: Code
+            "(\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]|" +   // 3: Display Math
+            "\\$(?!\\{)([^$]+?)\\$)|" +                                             // 4: Inline Math
+            "<?(https?://[\\w\\-\\._~:/?#\\[\\]@!\\$&'\\(\\)\\*\\+,;=]+)>?|" +      // 5: Raw URLs (Swallows < >)
+            "\\[(.*?)\\]\\((https?://.*?)\\)"                                       // 6 & 7: Markdown Links
     );
-    
-    private Icon userIcon;    
+
+    private Icon userIcon;
 
     private Style agentName, agentMsg, userName, userMsg;
-    private Style codeStyle, keywordStyle, stringStyle, commentStyle, normalStyle;
+    private Style codeStyle, keywordStyle, stringStyle, commentStyle, normalStyle, linkStyle;
 
     /**
      * Creates new form ChatMessagePanel
@@ -47,7 +52,64 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         loadIcons();
         chatPane.setBackground(ChatThemeUtils.getCanvasBackground());
         chatPane.setForeground(ChatThemeUtils.getCanvasForeground());
+
+        setupLinkListener();
         javax.swing.SwingUtilities.invokeLater(this::initStyles);
+    }
+
+    // 🔗 DETECT CLICKS ON LINKS
+   private void setupLinkListener() {
+        MouseAdapter linkAdapter = new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                if (SwingUtilities.isLeftMouseButton(e)) {
+                    Element elem = getElementAt(e.getPoint());
+                    if (elem != null) {
+                        AttributeSet attrs = elem.getAttributes();
+                        if (Boolean.TRUE.equals(attrs.getAttribute("IsLink"))) {
+                            // 1. Try to get hidden URL (Markdown style)
+                            String url = (String) attrs.getAttribute("LinkUrl");
+                            
+                            // 2. If null, use the text itself (Raw URL style)
+                            if (url == null) {
+                                try {
+                                    int start = elem.getStartOffset();
+                                    int end = elem.getEndOffset();
+                                    url = chatPane.getDocument().getText(start, end - start);
+                                } catch (BadLocationException ex) {}
+                            }
+                            
+                            if (url != null) ChatThemeUtils.openBrowser(url);
+                        }
+                    }
+                }
+            }
+
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                Element elem = getElementAt(e.getPoint());
+                if (elem != null) {
+                    AttributeSet attrs = elem.getAttributes();
+                    if (Boolean.TRUE.equals(attrs.getAttribute("IsLink"))) {
+                        chatPane.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                        return;
+                    }
+                }
+                chatPane.setCursor(Cursor.getDefaultCursor());
+            }
+        };
+        
+        chatPane.addMouseListener(linkAdapter);
+        chatPane.addMouseMotionListener(linkAdapter);
+    }
+    
+    private Element getElementAt(Point p) {
+        int pos = chatPane.viewToModel(p);
+        if (pos >= 0) {
+            StyledDocument doc = chatPane.getStyledDocument();
+            return doc.getCharacterElement(pos);
+        }
+        return null;
     }
     
     private void loadIcons() {
@@ -58,24 +120,24 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         } else {
             // Fallback: A simple colored circle generated via code could go here
             // For now, null is fine (Factory handles null safely)
-            userIcon = null; 
+            userIcon = null;
         }
     }
-    
+
     public void initStyles() {
         int anchorIndex = getAnchorIndex(); // Save scroll position
 
         // 🎨 1. UPDATE GLOBAL COLORS (When theme changes)
         Color bg = ChatThemeUtils.getCanvasBackground();
         Color fg = ChatThemeUtils.getCanvasForeground();
-        
+
         chatPane.setBackground(bg);
         chatPane.setForeground(fg);
 
         StyledDocument doc = chatPane.getStyledDocument();
         String mainFontName = ChatThemeUtils.getUnicodeFontName();
         int fontSize = 14;
-       
+
         // --- DEFINE BASE STYLES ---
         agentName = chatPane.addStyle("AgentName", null);
         StyleConstants.setBold(agentName, true);
@@ -99,21 +161,31 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         StyleConstants.setFontSize(userMsg, fontSize);
         userMsg.removeAttribute(StyleConstants.Foreground);
 
+        // 🔗 LINK STYLE
+        linkStyle = chatPane.addStyle("Link", null);
+        StyleConstants.setForeground(linkStyle, new Color(0, 102, 204)); // Link Blue
+        StyleConstants.setUnderline(linkStyle, true);
+        StyleConstants.setFontFamily(linkStyle, mainFontName);
+        StyleConstants.setFontSize(linkStyle, fontSize);
+        // Custom attribute to identify links in MouseListener
+        linkStyle.addAttribute("IsLink", true);
+
         // --- 🔄 REFRESH ALL DYNAMIC COMPONENTS (Code & Bubbles) ---
         refreshAllComponents();
 
-        if (anchorIndex >= 0) snapToPosition(anchorIndex);
+        if (anchorIndex >= 0) {
+            snapToPosition(anchorIndex);
+        }
     }
-    
-    // ===== Public API =====
 
+    // ===== Public API =====
     public void addUserMessage(String msg) {
         this.lastConversationIndex = chatPane.getDocument().getLength();
-        
+
         // Use Factory, pass current background to calculate bubble color
         JPanel userBubble = MessageBubbleFactory.createBubble(
-                msg, 
-                chatPane.getBackground(), 
+                msg,
+                chatPane.getBackground(),
                 userIcon,
                 true // isUser = true
         );
@@ -122,7 +194,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         append("\n", userMsg); // Spacing before
         insertComponent(userBubble);
         append("\n", userMsg); // Spacing after
-        
+
         snapToPosition(lastConversationIndex);
     }
 
@@ -134,8 +206,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
 
     // ===== Internal Logic =====
-
-   private void parseAndAppend(String text) {
+    private void parseAndAppend(String text) {
         if (text == null || text.isEmpty()) return;
 
         Matcher m = MASTER_PATTERN.matcher(text);
@@ -143,46 +214,58 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         while (m.find()) {
             String preText = text.substring(lastIndex, m.start());
-            
-            // 📝 AGENT TEXT: Append directly as text
-            if (!preText.isEmpty()) {
-                append(preText, agentMsg);
-            }
+            if (!preText.isEmpty()) append(preText, agentMsg);
 
             if (m.group(1) != null || m.group(2) != null) {
-                // --- Code Block (Always use Components) ---
+                // --- Code Block ---
                 String content = m.group(2).trim();
                 append("\n", agentMsg);
                 insertComponent(CodeBlockFactory.createCodeComponent(
-                        content, 
-                        chatPane.getBackground(), 
-                        chatPane.getForeground()
-                ));
+                        content, chatPane.getBackground(), chatPane.getForeground()));
                 append("\n", agentMsg);
-            } else {
+            } 
+            else if (m.group(3) != null || m.group(4) != null) { 
                 // --- Math Block ---
-                String mathRaw = m.group(3); 
+                String mathRaw = (m.group(3) != null) ? m.group(3) : m.group(4);
                 String mathContent = MathRenderer.extractMathContent(mathRaw);
                 Icon icon = MathRenderer.latexToIcon(mathRaw, mathContent); 
-                
-                if (icon != null) {
-                    insertIconDirectly(icon);
-                } else {
-                    append(mathRaw, agentMsg);
-                }
+                if (icon != null) insertIconDirectly(icon);
+                else append(mathRaw, agentMsg);
             }
+            else if (m.group(5) != null) {
+                // --- Raw URL ---
+                String url = m.group(5);
+                append(url, linkStyle); // Display URL as-is
+            }
+            else if (m.group(6) != null && m.group(7) != null) {
+                // --- 🔗 MARKDOWN LINK [Title](URL) ---
+                String title = m.group(6); // The text to show (e.g., "Python Tutorial")
+                String url = m.group(7);   // The actual link
+                
+                // We display the TITLE, but we need to store the URL so the click listener knows where to go.
+                // Since our current style only supports one attribute, we need a way to map this title -> url.
+                // A simple trick: Create a unique style for this specific link or use ClientProperty logic.
+                // For simplicity in JTextPane, we will just display the Title and use the URL as the attribute value.
+                
+                SimpleAttributeSet linkAttrs = new SimpleAttributeSet(linkStyle);
+                linkAttrs.addAttribute("LinkUrl", url); // Store hidden URL
+                linkAttrs.addAttribute("IsLink", true); // Tag as link
+                
+                try {
+                    StyledDocument doc = chatPane.getStyledDocument();
+                    doc.insertString(doc.getLength(), title, linkAttrs);
+                } catch (BadLocationException e) {}
+            }
+            
             lastIndex = m.end();
         }
 
-        // Final Chunk
         if (lastIndex < text.length()) {
-            String tail = text.substring(lastIndex);
-            if (!tail.isEmpty()) {
-                append(tail, agentMsg);
-            }
+            append(text.substring(lastIndex), agentMsg);
         }
     }
-
+    
+    
     /**
      * Iterates through document to find existing Panels and re-applies theme.
      * Handles both Code Blocks and User Bubbles.
@@ -190,7 +273,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     private void refreshAllComponents() {
         StyledDocument doc = chatPane.getStyledDocument();
         Element root = doc.getDefaultRootElement();
-        
+
         Color currentBg = chatPane.getBackground();
         Color currentFg = chatPane.getForeground();
         boolean isDark = ChatThemeUtils.isDarkTheme(currentBg);
@@ -201,7 +284,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 Element leaf = line.getElement(j);
                 AttributeSet attrs = leaf.getAttributes();
                 Component comp = StyleConstants.getComponent(attrs);
-                
+
                 if (comp instanceof JPanel) {
                     JPanel panel = (JPanel) comp;
 
@@ -209,22 +292,20 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                     if (panel.getClientProperty("isCodeBlock") != null) {
                         JTextPane innerPane = (JTextPane) panel.getComponent(0);
                         String rawCode = (String) panel.getClientProperty("rawCode");
-                        
+
                         Color codeBg = ChatThemeUtils.getCodeBackgroundColor(currentBg);
                         Color borderCol = isDark ? codeBg.brighter() : codeBg.darker();
-                        
+
                         panel.setBackground(codeBg);
                         panel.setBorder(javax.swing.BorderFactory.createCompoundBorder(
-                             javax.swing.BorderFactory.createMatteBorder(1, 0, 1, 0, borderCol),
-                             javax.swing.BorderFactory.createEmptyBorder(10, 10, 10, 10)
+                                javax.swing.BorderFactory.createMatteBorder(1, 0, 1, 0, borderCol),
+                                javax.swing.BorderFactory.createEmptyBorder(10, 10, 10, 10)
                         ));
-                        
+
                         innerPane.setBackground(codeBg);
                         innerPane.setForeground(currentFg);
                         CodeBlockFactory.highlightCode(innerPane, rawCode, isDark);
-                    }
-                    
-                    // CASE 2: IT IS A USER BUBBLE (NEW)
+                    } // CASE 2: IT IS A USER BUBBLE (NEW)
                     else if (panel.getClientProperty("isUserBubble") != null) {
                         MessageBubbleFactory.applyTheme(panel, currentBg);
                     }
@@ -234,12 +315,12 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
 
     // ===== Helpers for Document Manipulation =====
-
     private void append(String text, Style style) {
         try {
             StyledDocument doc = chatPane.getStyledDocument();
             doc.insertString(doc.getLength(), text, style);
-        } catch (BadLocationException ignored) {}
+        } catch (BadLocationException ignored) {
+        }
     }
 
     private void insertComponent(Component comp) {
@@ -248,7 +329,8 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             SimpleAttributeSet attrs = new SimpleAttributeSet();
             StyleConstants.setComponent(attrs, comp);
             doc.insertString(doc.getLength(), " ", attrs);
-        } catch (BadLocationException ignored) {}
+        } catch (BadLocationException ignored) {
+        }
     }
 
     private void insertIconDirectly(Icon icon) {
@@ -257,11 +339,11 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             SimpleAttributeSet attrs = new SimpleAttributeSet();
             StyleConstants.setIcon(attrs, icon);
             doc.insertString(doc.getLength(), " ", attrs);
-        } catch (BadLocationException ignored) {}
+        } catch (BadLocationException ignored) {
+        }
     }
 
     // ===== Scroll Helpers =====
-
     private int getAnchorIndex() {
         if (jScrollPane1 != null && jScrollPane1.getViewport() != null) {
             Point currentPoint = jScrollPane1.getViewport().getViewPosition();
@@ -275,17 +357,20 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             javax.swing.SwingUtilities.invokeLater(() -> {
                 try {
                     Rectangle rect = chatPane.modelToView(index);
-                    if (rect == null) return;
+                    if (rect == null) {
+                        return;
+                    }
                     Dimension viewSize = jScrollPane1.getViewport().getViewSize();
                     Dimension extentSize = jScrollPane1.getViewport().getExtentSize();
                     int maxScrollY = viewSize.height - extentSize.height;
                     int finalY = Math.min(rect.y, Math.max(0, maxScrollY));
                     jScrollPane1.getViewport().setViewPosition(new Point(0, finalY));
-                } catch (BadLocationException ignored) {}
+                } catch (BadLocationException ignored) {
+                }
             });
         });
     }
-   
+
     /**
      * This method is called from within the constructor to initialize the form.
      * WARNING: Do NOT modify this code. The content of this method is always
