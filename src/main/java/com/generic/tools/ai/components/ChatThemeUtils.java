@@ -2,6 +2,7 @@ package com.generic.tools.ai.components;
 
 import java.awt.Color;
 import java.awt.Desktop;
+import java.awt.Font;
 import java.awt.GraphicsEnvironment;
 import java.net.URI;
 import java.util.Arrays;
@@ -81,22 +82,22 @@ public class ChatThemeUtils {
         String[] availableFonts = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
         Set<String> fontSet = new HashSet<>(Arrays.asList(availableFonts));
 
-        // 1. Priority: Windows Emoji Font (Best for Windows)
-        if (fontSet.contains("Segoe UI Emoji")) return "Segoe UI Emoji";
-        
-        // 2. Priority: Mac Emoji Font
-        if (fontSet.contains("Apple Color Emoji")) return "Apple Color Emoji";
-        
-        // 3. Priority: Linux Emoji Font
-        if (fontSet.contains("Noto Color Emoji")) return "Noto Color Emoji";
-        
-        // 4. Fallback: Nirmala UI (Good for Indian languages)
+        // 1. "Nirmala UI" is the best Windows font for Indic scripts + English.
         if (fontSet.contains("Nirmala UI")) return "Nirmala UI";
         
-        // 5. Last Resort: Logical Font (Java decides)
-        return "Dialog";
+        // 2. "Arial Unicode MS" is a heavy fallback that has everything.
+        if (fontSet.contains("Arial Unicode MS")) return "Arial Unicode MS";
+        
+        // 3. "Noto Sans" is the standard on Linux/Android for multilingual.
+        if (fontSet.contains("Noto Sans")) return "Noto Sans";
+        
+        // 4. "Segoe UI Emoji" - good for Emojis, but BAD for Indian Text.
+        // We only use it if the text-heavy fonts above are missing.
+        if (fontSet.contains("Segoe UI Emoji")) return "Segoe UI Emoji";
+        
+        // 5. Fallback
+        return Font.DIALOG;
     }
-
     public static boolean isDarkTheme(Color bg) {
         double brightness = (0.299 * bg.getRed() + 0.587 * bg.getGreen() + 0.114 * bg.getBlue()) / 255;
         return brightness < 0.5;
