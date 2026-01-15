@@ -11,7 +11,7 @@ import javax.swing.JTextPane;
 
 /**
  * Main Factory to create Table blocks.
- * Refactored to delegate logic to TableClipboardUtils and TableCellRenderer.
+ * Orchestrates TableClipboardUtils (for copy/latex) and TableCellRenderer (for fonts/ui).
  */
 public class TableBlockFactory {
 
@@ -29,10 +29,11 @@ public class TableBlockFactory {
         tablePanel.setBackground(borderColor); 
         tablePanel.setBorder(BorderFactory.createLineBorder(borderColor, 1));
 
-        // 1. Flatten LaTeX (handled by Utils now)
+        // 1. Flatten LaTeX so tables don't break on \[ ... \]
+        // (Logic handled in TableClipboardUtils)
         String processedMarkdown = TableClipboardUtils.flattenLatex(markdownTable.trim());
 
-        // 2. Attach Context Menu (handled by Utils now)
+        // 2. Attach Context Menu (Copy functionality)
         TableClipboardUtils.attachCopyMenu(tablePanel, processedMarkdown);
 
         String[] lines = processedMarkdown.split("\\n");
@@ -53,7 +54,8 @@ public class TableBlockFactory {
             int col = 0;
             for (int i = startIdx; i < cells.length; i++) {
                 
-                // 3. Delegate UI Creation to CellRenderer
+                // 3. Delegate UI Creation to Renderer
+                // (This handles the Hybrid Font logic for Tofu)
                 boolean isHeader = (row == 0);
                 JTextPane textComp = TableCellRenderer.createCellComponent(
                         cells[i].trim(), 

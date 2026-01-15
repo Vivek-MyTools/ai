@@ -8,11 +8,15 @@ import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
+import java.io.File;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import javax.swing.JFileChooser;
+import javax.swing.JMenuItem;
 import javax.swing.JPanel;
+import javax.swing.JPopupMenu;
 import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
 import javax.swing.text.AttributeSet;
@@ -63,10 +67,49 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         setupLinkListener();
         javax.swing.SwingUtilities.invokeLater(this::initStyles);
+        setupExportMenu();
+    }
+    
+    private void setupExportMenu() {
+        JPopupMenu popup = new JPopupMenu();
+        JMenuItem exportItem = new JMenuItem("Export Chat to PDF");
+        
+        exportItem.addActionListener(e -> {
+            JFileChooser fileChooser = new JFileChooser();
+            fileChooser.setDialogTitle("Save PDF");
+            fileChooser.setSelectedFile(new File("ChatExport.pdf"));
+            
+            int userSelection = fileChooser.showSaveDialog(this);
+            if (userSelection == JFileChooser.APPROVE_OPTION) {
+                File file = fileChooser.getSelectedFile();
+                if (!file.getName().toLowerCase().endsWith(".pdf")) {
+                    file = new File(file.getAbsolutePath() + ".pdf");
+                }
+                
+                // IMPORTANT: We export 'chatPane' (the text area), not 'this' (the scroll container)
+                // This ensures we capture the full height, not just the visible scroll area.
+                ChatExportUtils.exportToPdf(chatPane, file);
+            }
+        });
+
+        popup.add(exportItem);
+
+        chatPane.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mousePressed(MouseEvent e) { showPopup(e); }
+            @Override
+            public void mouseReleased(MouseEvent e) { showPopup(e); }
+            
+            private void showPopup(MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    popup.show(e.getComponent(), e.getX(), e.getY());
+                }
+            }
+        });
     }
 
     // 🔗 DETECT CLICKS ON LINKS
-   private void setupLinkListener() {
+    private void setupLinkListener() {
         MouseAdapter linkAdapter = new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
@@ -212,7 +255,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
 
     public void addAgentMessage(String msg) {
-        append("Agent: ", agentName);
+        append("\nAgent: ", agentName);
         parseAndAppend(msg);
         append("\n\n", agentMsg);
         snapToPosition(lastConversationIndex);
