@@ -5,14 +5,12 @@ import java.awt.Color;
 import java.awt.GridBagConstraints;
 import java.awt.GridBagLayout;
 import java.awt.Insets;
+import java.util.ArrayList;
+import java.util.List;
 import javax.swing.BorderFactory;
 import javax.swing.JPanel;
 import javax.swing.JTextPane;
 
-/**
- * Main Factory to create Table blocks.
- * Orchestrates TableClipboardUtils (for copy/latex) and TableCellRenderer (for fonts/ui).
- */
 public class TableBlockFactory {
 
     public static JPanel createTable(String markdownTable, Color parentBg) {
@@ -29,42 +27,37 @@ public class TableBlockFactory {
         tablePanel.setBackground(borderColor); 
         tablePanel.setBorder(BorderFactory.createLineBorder(borderColor, 1));
 
-        // 1. Flatten LaTeX so tables don't break on \[ ... \]
-        // (Logic handled in TableClipboardUtils)
-        String processedMarkdown = TableClipboardUtils.flattenLatex(markdownTable.trim());
-
-        // 2. Attach Context Menu (Copy functionality)
-        TableClipboardUtils.attachCopyMenu(tablePanel, processedMarkdown);
-
-        String[] lines = processedMarkdown.split("\\n");
+        String processedMarkdown = TableClipboardUtils.flattenLatex(markdownTable);
+        String[] rows = processedMarkdown.split("\n");
+        
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.fill = GridBagConstraints.BOTH;
-        gbc.insets = new Insets(1, 1, 0, 0); 
-        gbc.weightx = 1.0; 
-        gbc.weighty = 0.0; 
-        
+        gbc.weightx = 1.0;
+        gbc.weighty = 1.0;
+        gbc.insets = new Insets(1, 1, 1, 1); // Grid gap
+
         int row = 0;
-        
-        for (String line : lines) {
-            if (line.contains("---")) continue; 
-            
-            String[] cells = line.trim().split("\\|");
-            int startIdx = (cells.length > 0 && cells[0].isEmpty()) ? 1 : 0;
+        for (String line : rows) {
+            if (line.trim().isEmpty()) continue;
+            // Skip markdown separator lines like |---|---|
+            if (line.replaceAll("[\\|\\-\\s:]", "").isEmpty()) continue; 
+
+            // FIX: Use smartSplit instead of string.split("|")
+            // This prevents LaTeX formulas like $P(A|B)$ from being cut in half.
+            List<String> cells = smartSplit(line);
             
             int col = 0;
-            for (int i = startIdx; i < cells.length; i++) {
-                
-                // 3. Delegate UI Creation to Renderer
-                // (This handles the Hybrid Font logic for Tofu)
+            for (String cellText : cells) {
                 boolean isHeader = (row == 0);
+                
+                // Render Cell (Code + Math Support)
                 JTextPane textComp = TableCellRenderer.createCellComponent(
-                        cells[i].trim(), 
+                        cellText.trim(), 
                         isHeader, 
                         textColor, 
                         linkColor
                 );
                 
-                // Attach context menu to individual cells too
                 TableClipboardUtils.attachCopyMenu(textComp, processedMarkdown);
 
                 JPanel cellPanel = new JPanel(new BorderLayout());
@@ -85,5 +78,38 @@ public class TableBlockFactory {
         }
         
         return tablePanel;
+    }
+
+    // --- FIX: Smart Splitter ---
+    // Splits by '|' ONLY if not inside Code (`) or Math ($) delimiters.
+    private static List<String> smartSplit(String line) {
+        List<String> cells = new ArrayList<>();
+        StringBuilder current = new StringBuilder();
+        boolean inCode = false;
+        boolean inMath = false;
+
+        // Trim outer pipes first: "| A | B |" -> " A | B "
+        String trimmed = line.trim();
+        if (trimmed.startsWith("|")) trimmed = trimmed.substring(1);
+        if (trimmed.endsWith("|") && !trimmed.endsWith("\\|")) trimmed = trimmed.substring(0, trimmed.length() - 1);
+
+        char[] chars = trimmed.toCharArray();
+        for (int i = 0; i < chars.length; i++) {
+            char c = chars[i];
+            
+            // Toggle states (ignoring escaped chars)
+            if (c == '`') inCode = !inCode;
+            if (c == '$' && !inCode) inMath = !inMath;
+
+            // Split on Pipe if SAFE
+            if (c == '|' && !inCode && !inMath) {
+                cells.add(current.toString());
+                current.setLength(0); // Reset buffer
+            } else {
+                current.append(c);
+            }
+        }
+        cells.add(current.toString()); // Add last cell
+        return cells;
     }
 }
