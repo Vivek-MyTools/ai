@@ -270,7 +270,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         while (m.find()) {
             String preText = text.substring(lastIndex, m.start());
-            if (!preText.isEmpty()) append(preText, agentMsg);
+            if (!preText.isEmpty()) appendMarkdownText(preText); //append(preText, agentMsg);
 
             if (m.group(1) != null || m.group(2) != null) {
                 // Code

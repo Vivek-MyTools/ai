@@ -12,122 +12,108 @@ import javax.swing.UIManager;
 
 public class ChatThemeUtils {
 
-    // 1. Get the Main Background from the Look and Feel
+    // --- NEW: Smart Font Detection ---
+    // Checks if a specific text (like "Bengaluru" or "25°C") renders cleanly 
+    // in our preferred fonts. Returns the best match for THAT specific string.
+    public static String getSmartFontName(String text) {
+        if (text == null || text.trim().isEmpty()) return getUnicodeFontName();
+
+        // Priority List:
+        // 1. Nirmala UI (Best for Kannada/Indic + English)
+        // 2. Segoe UI Symbol (Best for Math/Weather symbols, but NO Kannada)
+        // 3. Arial Unicode MS (Heavy fallback)
+        // 4. Segoe UI Emoji (Last resort for colored emojis)
+        String[] priorities = { "Nirmala UI", "Segoe UI Symbol", "Arial Unicode MS", "Segoe UI Emoji", Font.SANS_SERIF };
+        
+        for (String fontName : priorities) {
+            Font f = new Font(fontName, Font.PLAIN, 14);
+            // canDisplayUpTo returns -1 if the font can display the WHOLE string.
+            if (f.canDisplayUpTo(text) == -1) {
+                return fontName;
+            }
+        }
+        
+        // If no single font can display EVERYTHING (e.g. mixed Kannada + weird Math),
+        // we default to the Unicode font (Nirmala) because reading Text is more important than a symbol.
+        return getUnicodeFontName();
+    }
+
     public static Color getCanvasBackground() {
         Color c = UIManager.getColor("TextArea.background");
         return (c != null) ? c : Color.WHITE; 
     }
 
-    // 2. Get the Main Text Color from the Look and Feel
     public static Color getCanvasForeground() {
         Color c = UIManager.getColor("TextArea.foreground");
         return (c != null) ? c : Color.BLACK;
     }
     
-    // 3. 🎨 NEW: Calculate Bubble Color relative to Parent Background
-    // This creates the "slightly darker" or "elevated" look you requested
     public static Color getBubbleBackgroundColor(Color baseBg) {
         boolean isDark = isDarkTheme(baseBg);
-        
-        // Logic: 
-        // Light Theme: Darken the background slightly (0.95 factor)
-        // Dark Theme: Lighten the background slightly (1.15 factor) to create "elevation"
         float factor = isDark ? 1.15f : 0.95f;
-        
         int r = Math.min(255, (int) (baseBg.getRed() * factor));
         int g = Math.min(255, (int) (baseBg.getGreen() * factor));
         int b = Math.min(255, (int) (baseBg.getBlue() * factor));
-        
         return new Color(r, g, b);
     }
 
-    // 4. Get a "Native" looking Highlight Color (fallback if needed)
     public static Color getUserBubbleColor(Color baseBg) {
         boolean isDark = isDarkTheme(baseBg);
-        
-        // LOGIC: Stronger contrast than the Agent
-        // Light Theme: Make it significantly darker (0.85 factor)
-        // Dark Theme: Make it significantly lighter (1.30 factor)
         float factor = isDark ? 1.30f : 0.85f; 
-        
         int r = Math.min(255, (int) (baseBg.getRed() * factor));
         int g = Math.min(255, (int) (baseBg.getGreen() * factor));
         int b = Math.min(255, (int) (baseBg.getBlue() * factor));
-        
         return new Color(r, g, b);
     }
     
     public static Color getAgentBubbleColor(Color baseBg) {
         boolean isDark = isDarkTheme(baseBg);
-        
-        // LOGIC: 
-        // If Light Theme: Darken the background (Factor < 1.0)
-        // If Dark Theme: Lighten the background (Factor > 1.0) to create "Surface" effect
-        float factor = isDark ? 1.12f : 0.94f; // 6-12% difference is subtle but visible
-        
+        float factor = isDark ? 1.12f : 0.94f; 
         int r = Math.min(255, (int) (baseBg.getRed() * factor));
         int g = Math.min(255, (int) (baseBg.getGreen() * factor));
         int b = Math.min(255, (int) (baseBg.getBlue() * factor));
-        
         return new Color(r, g, b);
     }
 
-    // 5. Calculate readable text color
     public static Color getContrastingTextColor(Color bg) {
         double brightness = (0.299 * bg.getRed() + 0.587 * bg.getGreen() + 0.114 * bg.getBlue()) / 255;
         return (brightness < 0.6) ? Color.WHITE : Color.BLACK;
     }
     
+    // Default Static Fallback
     public static String getUnicodeFontName() {
         String[] availableFonts = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
         Set<String> fontSet = new HashSet<>(Arrays.asList(availableFonts));
 
-        // 1. "Nirmala UI" is the best Windows font for Indic scripts + English.
         if (fontSet.contains("Nirmala UI")) return "Nirmala UI";
-        
-        // 2. "Arial Unicode MS" is a heavy fallback that has everything.
         if (fontSet.contains("Arial Unicode MS")) return "Arial Unicode MS";
-        
-        // 3. "Noto Sans" is the standard on Linux/Android for multilingual.
         if (fontSet.contains("Noto Sans")) return "Noto Sans";
-        
-        // 4. "Segoe UI Emoji" - good for Emojis, but BAD for Indian Text.
-        // We only use it if the text-heavy fonts above are missing.
-        if (fontSet.contains("Segoe UI Emoji")) return "Segoe UI Emoji";
-        
-        // 5. Fallback
         return Font.DIALOG;
     }
+    
     public static boolean isDarkTheme(Color bg) {
         double brightness = (0.299 * bg.getRed() + 0.587 * bg.getGreen() + 0.114 * bg.getBlue()) / 255;
         return brightness < 0.5;
     }
     
     public static Color getCodeBackgroundColor(Color baseBg) {
-        // We can reuse the bubble logic or keep it distinct. 
-        // Using the same logic ensures consistency.
         return getBubbleBackgroundColor(baseBg);
     }
     
     public static Color getTableBorderColor(Color baseBg) {
         boolean isDark = isDarkTheme(baseBg);
-        // Dark Mode: 40% Lighter than bg (visible border)
-        // Light Mode: 15% Darker than bg
         float factor = isDark ? 1.40f : 0.85f; 
         return shiftColor(baseBg, factor);
     }
 
     public static Color getTableHeaderColor(Color baseBg) {
         boolean isDark = isDarkTheme(baseBg);
-        // Header: 20% Lighter than bg (Dark Mode) or 5% Darker (Light Mode)
         float factor = isDark ? 1.20f : 0.95f;
         return shiftColor(baseBg, factor);
     }
 
     public static Color getTableCellColor(Color baseBg) {
         boolean isDark = isDarkTheme(baseBg);
-        // Cell: 5% Lighter than bg (Dark Mode) to stay subtle
-        // Light Mode: White (clean look)
         if (isDark) {
             return shiftColor(baseBg, 1.05f); 
         } else {
@@ -135,7 +121,6 @@ public class ChatThemeUtils {
         }
     }
 
-    // 🎨 MATH HELPER: Lightens or Darkens a color while keeping its Hue
     private static Color shiftColor(Color c, float factor) {
         int r = Math.min(255, Math.max(0, (int) (c.getRed() * factor)));
         int g = Math.min(255, Math.max(0, (int) (c.getGreen() * factor)));
@@ -146,7 +131,6 @@ public class ChatThemeUtils {
     public static void openBrowser(String url) {
         if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
             try {
-                // Handle potential trailing punctuation from markdown like ")" or "."
                 String cleanUrl = url;
                 if (cleanUrl.endsWith(")") || cleanUrl.endsWith(".") || cleanUrl.endsWith(",")) {
                     cleanUrl = cleanUrl.substring(0, cleanUrl.length() - 1);

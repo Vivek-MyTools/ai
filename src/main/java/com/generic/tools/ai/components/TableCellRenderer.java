@@ -22,21 +22,30 @@ public class TableCellRenderer {
     private static final Pattern LINK_PATTERN = Pattern.compile("<?(https?://[^\\s]+)>?|\\[(.*?)\\]\\((https?://.*?)\\)");
     private static final Pattern MATH_PATTERN = Pattern.compile("(\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]|\\$(?!\\{)([^$]+?)\\$)");
     
-    // FIX: Removed Degree (\u00B0), Celsius (\u2103), and Fahrenheit (\u2109) from this pattern.
-    // They are text symbols, not emojis, and should use the main font to avoid "tofu" boxes.
-    private static final Pattern SYMBOL_PATTERN = Pattern.compile("[\u2600-\u27BF\u2B00-\u2BFF\uFE00-\uFE0F]|[\uD800-\uDFFF]+");
+    // FIX: Combined Pattern to detect Emojis AND Degrees separately
+    // Group 1: Emojis (Sun, Cloud, etc.)
+    // Group 2: Degrees (°, ℃, ℉)
+    private static final Pattern SPECIAL_CHARS_PATTERN = Pattern.compile(
+        "(?:" + 
+        "([\\u2600-\\u27BF\\u2B00-\\u2BFF\\uFE00-\\uFE0F]|[\\uD800-\\uDFFF]+)" + // Group 1: Emojis
+        "|" +
+        "([\\u00B0\\u2103\\u2109])" + // Group 2: Degrees
+        ")"
+    );
     
     private static String cachedSymbolFont = null;
 
     public static JTextPane createCellComponent(String rawText, boolean isHeader, Color textColor, Color linkColor) {
-        // Cleanup & Unicode normalization
-        rawText = rawText.replace("<br>", "\n").replace("<br/>", "\n");
+        // Sanitize
+        rawText = rawText.replace("\u00A0", " ").replace("\uFE0F", "");
+        rawText = rawText.replace("<br>", "\n").replace("<br/>", "\n").trim();
+        
         boolean isBold = rawText.startsWith("**") && rawText.endsWith("**") && rawText.length() > 4;
         if (isBold) rawText = rawText.substring(2, rawText.length() - 2);
         boolean isItalic = !isBold && rawText.startsWith("*") && rawText.endsWith("*") && rawText.length() > 2;
         if (isItalic) rawText = rawText.substring(1, rawText.length() - 1);
         
-        // Normalize degrees to standard forms
+        // Normalize: Force standard degree symbol
         rawText = rawText.replace("**", "").replace("\u2103", "\u00B0C").replace("\u2109", "\u00B0F").replace("\u00B0", "\u00B0");
 
         String displayText = rawText;
@@ -48,44 +57,59 @@ public class TableCellRenderer {
         textComp.setOpaque(false);
         textComp.setFont(new Font(Font.DIALOG, Font.PLAIN, 14));
 
-        // --- ATTRIBUTES ---
-        // Main font handles Text + Standard Symbols (Degree, C, F, Kannada, etc.)
+        // --- 1. Main Text Attribute (Uses Smart Font Logic for Language) ---
         SimpleAttributeSet mainAttrs = new SimpleAttributeSet();
-        StyleConstants.setFontFamily(mainAttrs, ChatThemeUtils.getUnicodeFontName());
+        StyleConstants.setFontFamily(mainAttrs, ChatThemeUtils.getSmartFontName(displayText));
         StyleConstants.setFontSize(mainAttrs, 14);
 
-        // Symbol font handles strictly Emojis (Sun, Cloud, etc.)
-        SimpleAttributeSet symbolAttrs = new SimpleAttributeSet();
-        StyleConstants.setFontFamily(symbolAttrs, getSymbolFontName());
-        StyleConstants.setFontSize(symbolAttrs, 14);
+        // --- 2. Emoji Attribute (Uses Emoji Font) ---
+        SimpleAttributeSet emojiAttrs = new SimpleAttributeSet();
+        StyleConstants.setFontFamily(emojiAttrs, "Segoe UI Emoji");
+        StyleConstants.setFontSize(emojiAttrs, 14);
 
-        if (isHeader || isBold) { StyleConstants.setBold(mainAttrs, true); StyleConstants.setBold(symbolAttrs, true); }
-        else if (isItalic) { StyleConstants.setItalic(mainAttrs, true); StyleConstants.setItalic(symbolAttrs, true); }
+        // --- 3. Degree/Math Attribute (Uses Symbol Font - FIX FOR TOFU) ---
+        SimpleAttributeSet degreeAttrs = new SimpleAttributeSet();
+        StyleConstants.setFontFamily(degreeAttrs, "Segoe UI Symbol"); 
+        StyleConstants.setFontSize(degreeAttrs, 14);
+
+        if (isHeader || isBold) { 
+            StyleConstants.setBold(mainAttrs, true); 
+            StyleConstants.setBold(emojiAttrs, true); 
+            StyleConstants.setBold(degreeAttrs, true);
+        } else if (isItalic) { 
+            StyleConstants.setItalic(mainAttrs, true); 
+            StyleConstants.setItalic(emojiAttrs, true);
+            StyleConstants.setItalic(degreeAttrs, true);
+        }
 
         if (url != null) {
-            StyleConstants.setForeground(mainAttrs, linkColor); StyleConstants.setForeground(symbolAttrs, linkColor);
-            StyleConstants.setUnderline(mainAttrs, true); StyleConstants.setUnderline(symbolAttrs, true);
+            Color c = linkColor;
+            StyleConstants.setForeground(mainAttrs, c); StyleConstants.setForeground(emojiAttrs, c); StyleConstants.setForeground(degreeAttrs, c);
+            StyleConstants.setUnderline(mainAttrs, true); StyleConstants.setUnderline(emojiAttrs, true); StyleConstants.setUnderline(degreeAttrs, true);
             textComp.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
             final String targetUrl = url;
             textComp.addMouseListener(new MouseAdapter() {
                 public void mouseClicked(MouseEvent e) { if (SwingUtilities.isLeftMouseButton(e)) ChatThemeUtils.openBrowser(targetUrl); }
             });
         } else {
-            StyleConstants.setForeground(mainAttrs, textColor); StyleConstants.setForeground(symbolAttrs, textColor);
+            StyleConstants.setForeground(mainAttrs, textColor); 
+            StyleConstants.setForeground(emojiAttrs, textColor);
+            StyleConstants.setForeground(degreeAttrs, textColor);
         }
 
-        parseContent(textComp, displayText, mainAttrs, symbolAttrs);
+        // Pass all 3 attribute sets to the parser
+        parseContent(textComp, displayText, mainAttrs, emojiAttrs, degreeAttrs);
         return textComp;
     }
 
-    private static void parseContent(JTextPane textComp, String text, SimpleAttributeSet mainAttrs, SimpleAttributeSet symbolAttrs) {
+    private static void parseContent(JTextPane textComp, String text, SimpleAttributeSet mainAttrs, SimpleAttributeSet emojiAttrs, SimpleAttributeSet degreeAttrs) {
         try {
             StyledDocument doc = textComp.getStyledDocument();
             Matcher mathMatcher = MATH_PATTERN.matcher(text);
             int lastIdx = 0;
             while (mathMatcher.find()) {
                 String preText = text.substring(lastIdx, mathMatcher.start());
-                if (!preText.isEmpty()) insertWithFallback(doc, preText, mainAttrs, symbolAttrs);
+                if (!preText.isEmpty()) insertWithFallback(doc, preText, mainAttrs, emojiAttrs, degreeAttrs);
                 
                 String mathRaw = mathMatcher.group();
                 String mathContent = MathRenderer.extractMathContent(mathRaw);
@@ -94,23 +118,34 @@ public class TableCellRenderer {
                 else { doc.insertString(doc.getLength(), mathRaw, mainAttrs); }
                 lastIdx = mathMatcher.end();
             }
-            if (lastIdx < text.length()) insertWithFallback(doc, text.substring(lastIdx), mainAttrs, symbolAttrs);
+            if (lastIdx < text.length()) insertWithFallback(doc, text.substring(lastIdx), mainAttrs, emojiAttrs, degreeAttrs);
             doc.setParagraphAttributes(0, doc.getLength(), mainAttrs, false);
         } catch (BadLocationException e) { textComp.setText(text); }
     }
 
-    private static void insertWithFallback(StyledDocument doc, String text, SimpleAttributeSet mainAttrs, SimpleAttributeSet symbolAttrs) throws BadLocationException {
-        Matcher matcher = SYMBOL_PATTERN.matcher(text);
+    private static void insertWithFallback(StyledDocument doc, String text, SimpleAttributeSet mainAttrs, SimpleAttributeSet emojiAttrs, SimpleAttributeSet degreeAttrs) throws BadLocationException {
+        Matcher matcher = SPECIAL_CHARS_PATTERN.matcher(text);
         int lastIdx = 0;
         while (matcher.find()) {
+            // Insert normal text (using Main Font)
             doc.insertString(doc.getLength(), text.substring(lastIdx, matcher.start()), mainAttrs);
-            // Only characters strictly matching the Emoji/Symbol pattern use the fallback font
-            doc.insertString(doc.getLength(), matcher.group(), symbolAttrs);
+            
+            // Check which group matched
+            if (matcher.group(1) != null) {
+                // Group 1: Emoji -> Use Emoji Font
+                doc.insertString(doc.getLength(), matcher.group(1), emojiAttrs);
+            } else if (matcher.group(2) != null) {
+                // Group 2: Degree -> Use Symbol Font (Fixes Tofu)
+                doc.insertString(doc.getLength(), matcher.group(2), degreeAttrs);
+            }
+            
             lastIdx = matcher.end();
         }
+        // Insert remaining text
         doc.insertString(doc.getLength(), text.substring(lastIdx), mainAttrs);
     }
     
+    // Kept for fallback, though createCellComponent now explicitly sets fonts
     private static String getSymbolFontName() {
         if (cachedSymbolFont != null) return cachedSymbolFont;
         String[] available = GraphicsEnvironment.getLocalGraphicsEnvironment().getAvailableFontFamilyNames();
