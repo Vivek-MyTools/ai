@@ -323,34 +323,28 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 if (comp instanceof JPanel) {
                     JPanel panel = (JPanel) comp;
 
-                    // CASE 1: IT IS A CODE BLOCK
                     if (panel.getClientProperty("isCodeBlock") != null) {
                         JTextPane innerPane = (JTextPane) panel.getComponent(0);
                         String rawCode = (String) panel.getClientProperty("rawCode");
-
                         Color codeBg = ChatThemeUtils.getCodeBackgroundColor(currentBg);
                         Color borderCol = isDark ? codeBg.brighter() : codeBg.darker();
-
                         panel.setBackground(codeBg);
                         panel.setBorder(javax.swing.BorderFactory.createCompoundBorder(
                                 javax.swing.BorderFactory.createMatteBorder(1, 0, 1, 0, borderCol),
                                 javax.swing.BorderFactory.createEmptyBorder(10, 10, 10, 10)
                         ));
-
                         innerPane.setBackground(codeBg);
                         innerPane.setForeground(currentFg);
                         CodeBlockFactory.highlightCode(innerPane, rawCode, isDark);
-                    } // CASE 2: IT IS A USER BUBBLE (NEW)
+                    } 
                     else if (panel.getClientProperty("isUserBubble") != null) {
                         MessageBubbleFactory.applyTheme(panel, currentBg);
-                    }else if (panel.getClientProperty("isTableBlock") != null) {
-            
-                        // 1. Update Border/Gap Color
+                    }
+                    else if (panel.getClientProperty("isTableBlock") != null) {
                         Color borderColor = ChatThemeUtils.getTableBorderColor(currentBg);
                         panel.setBackground(borderColor);
                         panel.setBorder(javax.swing.BorderFactory.createLineBorder(borderColor, 1));
-
-                        // 2. Update Headers and Cells
+                        
                         Color headerBg = ChatThemeUtils.getTableHeaderColor(currentBg);
                         Color cellBg   = ChatThemeUtils.getTableCellColor(currentBg);
                         Color textColor = ChatThemeUtils.getContrastingTextColor(cellBg);
@@ -358,16 +352,42 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                         for (Component cell : panel.getComponents()) {
                             if (cell instanceof JPanel) {
                                 JPanel cellPanel = (JPanel) cell;
-
                                 if (Boolean.TRUE.equals(cellPanel.getClientProperty("isTableHeader"))) {
                                     cellPanel.setBackground(headerBg);
                                 } else {
                                     cellPanel.setBackground(cellBg);
                                 }
 
-                                // Update Text Color
-                                if (cellPanel.getComponentCount() > 0 && cellPanel.getComponent(0) instanceof javax.swing.JTextArea) {
-                                     cellPanel.getComponent(0).setForeground(textColor);
+                                // 🔧 FIX: Correctly update JTextPane attributes inside table
+                                if (cellPanel.getComponentCount() > 0) {
+                                    Component contentComp = cellPanel.getComponent(0);
+                                    
+                                    if (contentComp instanceof JTextPane) {
+                                        JTextPane textPane = (JTextPane) contentComp;
+                                        textPane.setForeground(textColor); // Set component default
+                                        
+                                        StyledDocument cellDoc = textPane.getStyledDocument();
+                                        SimpleAttributeSet colorAttr = new SimpleAttributeSet();
+                                        StyleConstants.setForeground(colorAttr, textColor);
+                                        
+                                        // Iterate over content to update TEXT but preserve LINKS
+                                        int len = cellDoc.getLength();
+                                        int pos = 0;
+                                        while (pos < len) {
+                                            Element elem = cellDoc.getCharacterElement(pos);
+                                            AttributeSet elemAttrs = elem.getAttributes();
+                                            int end = elem.getEndOffset();
+                                            
+                                            // If NOT underlined (assuming underlined = link), update color
+                                            if (!StyleConstants.isUnderline(elemAttrs)) {
+                                                cellDoc.setCharacterAttributes(pos, end - pos, colorAttr, false);
+                                            }
+                                            pos = end;
+                                        }
+                                    } else if (contentComp instanceof javax.swing.text.JTextComponent) {
+                                         // Fallback for JTextArea
+                                         contentComp.setForeground(textColor);
+                                    }
                                 }
                             }
                         }
