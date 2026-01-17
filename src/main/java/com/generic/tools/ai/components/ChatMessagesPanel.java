@@ -1,6 +1,7 @@
 package com.generic.tools.ai.components;
 
 import com.generic.tools.ai.helper.ChatMessageData;
+import com.generic.tools.lnf.theme.LnfTheme;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
@@ -70,7 +71,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         setupLinkListener();
         javax.swing.SwingUtilities.invokeLater(this::initStyles);
         setupExportMenu();
-        
+        LnfTheme.getInstance().addComponent(this);
     }
     
     private void setupExportMenu() {
@@ -169,15 +170,17 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     public List<ChatMessageData> getMessageHistory() {
         return messageHistory;
     }
-    
-    public void loadHistory(List<ChatMessageData> history) {
-        // 1. Clear Data
+
+   public void loadHistory(List<ChatMessageData> history) {
+        // 1. DO NOT call this.removeAll(). It kills the ScrollPane.
+        // Instead, clear the TextPane content.
+        chatPane.setText(""); 
+        
+        // 2. Clear the internal history list so we don't duplicate data
+        // (Because addAgentMessage/addUserMessage adds to the list again)
         this.messageHistory.clear();
 
-        // 2. Remove UI Components
-        this.removeAll();
-
-        // 3. Re-Add UI Components
+        // 3. Re-create content
         for (ChatMessageData msg : history) {
             if ("USER".equals(msg.role)) {
                 addUserMessage(msg.content);
@@ -185,16 +188,15 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 addAgentMessage(msg.content);
             }
         }
-
-        // 4. IMPORTANT: Force ScrollPane update if this panel is inside one
-        if (this.getParent() instanceof javax.swing.JViewport) {
-            this.getParent().revalidate();
-            this.getParent().repaint();
-        }
-
-        // 5. Standard Refresh
-        this.revalidate();
-        this.repaint();
+        
+        // 4. Scroll to bottom
+        javax.swing.SwingUtilities.invokeLater(() -> {
+             if (jScrollPane1.getVerticalScrollBar() != null) {
+                 jScrollPane1.getVerticalScrollBar().setValue(
+                     jScrollPane1.getVerticalScrollBar().getMaximum()
+                 );
+             }
+        });
     }
 
     public void initStyles() {

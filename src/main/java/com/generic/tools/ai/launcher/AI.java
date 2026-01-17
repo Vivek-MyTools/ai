@@ -1,12 +1,21 @@
 package com.generic.tools.ai.launcher;
 
-public class AI extends javax.swing.JFrame {
+import com.generic.tools.lnf.theme.LnfTheme;
+import com.generic.tools.lnf.theme.ThemeChangeListener;
+import com.generic.tools.lnf.theme.ThemeHelper;
+import java.awt.Component;
+
+
+public class AI extends javax.swing.JFrame implements ThemeChangeListener{
 
     /**
      * Creates new form AI
      */
     public AI() {
         initComponents();
+        ThemeHelper.getInstance().addThemesToMenu(theme, null);        
+        LnfTheme.getInstance().addComponents(new Component[]{this,chatPanel}).apply();
+        LnfTheme.getInstance().register(this);
     }
 
     /**
@@ -18,10 +27,17 @@ public class AI extends javax.swing.JFrame {
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
-        chatPanel1 = new com.generic.tools.ai.components.ChatPanel();
+        chatPanel = new com.generic.tools.ai.components.ChatPanel();
+        jMenuBar1 = new javax.swing.JMenuBar();
+        theme = new javax.swing.JMenu();
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
-        getContentPane().add(chatPanel1, java.awt.BorderLayout.CENTER);
+        getContentPane().add(chatPanel, java.awt.BorderLayout.CENTER);
+
+        theme.setText("Theme");
+        jMenuBar1.add(theme);
+
+        setJMenuBar(jMenuBar1);
 
         setSize(new java.awt.Dimension(989, 559));
         setLocationRelativeTo(null);
@@ -63,6 +79,13 @@ public class AI extends javax.swing.JFrame {
     }
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
-    private com.generic.tools.ai.components.ChatPanel chatPanel1;
+    private com.generic.tools.ai.components.ChatPanel chatPanel;
+    private javax.swing.JMenuBar jMenuBar1;
+    private javax.swing.JMenu theme;
     // End of variables declaration//GEN-END:variables
+
+    @Override
+    public void onLookAndFeelChanged() {
+        chatPanel.themeUpdate();        
+    }
 }

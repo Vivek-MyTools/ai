@@ -18,8 +18,9 @@
   <SubComponents>
     <Container class="javax.swing.JSplitPane" name="splitPane">
       <Properties>
-        <Property name="dividerSize" type="int" value="1"/>
+        <Property name="dividerSize" type="int" value="3"/>
         <Property name="resizeWeight" type="double" value="1.0"/>
+        <Property name="oneTouchExpandable" type="boolean" value="true"/>
       </Properties>
       <Constraints>
         <Constraint layoutClass="org.netbeans.modules.form.compat2.layouts.DesignBorderLayout" value="org.netbeans.modules.form.compat2.layouts.DesignBorderLayout$BorderConstraintsDescription">
@@ -49,9 +50,6 @@
               </Events>
             </Component>
             <Component class="com.generic.tools.components.list.UIList" name="list">
-              <AuxValues>
-                <AuxValue name="JavaCodeGenerator_AddingCodePost" type="java.lang.String" value="list.addItem(&quot;_&quot;+NEW_CHAT+&quot;_&quot;);&#xa;list.setSelectedItem(&quot;_&quot;+NEW_CHAT+&quot;_&quot;);"/>
-              </AuxValues>
             </Component>
           </SubComponents>
         </Container>
