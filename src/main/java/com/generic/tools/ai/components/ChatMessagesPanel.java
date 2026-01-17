@@ -68,7 +68,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         chatPane.setForeground(ChatThemeUtils.getCanvasForeground());
 
         setupLinkListener();
-        javax.swing.SwingUtilities.invokeLater(this::initStyles);
+        initStyles();
         setupExportMenu();
         LnfTheme.getInstance().addComponent(this);
     }
@@ -211,8 +211,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         chatPane.setForeground(fg);
 
         StyledDocument doc = chatPane.getStyledDocument();
-        //String mainFontName = ChatThemeUtils.getUnicodeFontName();
-        String mainFontName = java.awt.Font.DIALOG;
+        String mainFontName = ChatThemeUtils.getUnicodeFontName();        
         int fontSize = 14;
 
         agentName = chatPane.addStyle("AgentName", null);
@@ -399,6 +398,16 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
                 if (comp instanceof JPanel) {
                     JPanel panel = (JPanel) comp;
+
+                    if (panel.getClientProperty("isCodeBlock") == null
+                            && panel.getClientProperty("isTableBlock") == null
+                            && panel.getClientProperty("isUserBubble") == null
+                            && panel.getComponentCount() > 0
+                            && panel.getComponent(0) instanceof javax.swing.JPanel) {
+
+                        // We found a wrapper! Switch target to the inner child.
+                        panel = (javax.swing.JPanel) panel.getComponent(0);
+                    }
 
                     if (panel.getClientProperty("isCodeBlock") != null) {
                         JTextPane innerPane = (JTextPane) panel.getComponent(0);
