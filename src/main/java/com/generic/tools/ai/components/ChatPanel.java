@@ -21,7 +21,8 @@ public class ChatPanel extends javax.swing.JPanel {
     private Map<ChatMessageWindow, Future<?>> activeWindowTasks = new HashMap<>();
     
     private javax.swing.JPanel cardsPanel;     
-    private java.awt.CardLayout cardLayout;    
+    private java.awt.CardLayout cardLayout;  
+    private ChatMessagesPanel messagesPanel;
     
     // --- Constants & Config ---
     private final static String NEW_CHAT_PREFIX = "New Chat "; 
@@ -37,13 +38,13 @@ public class ChatPanel extends javax.swing.JPanel {
 
     // --- Constructors ---
     public ChatPanel() {
-        this(null, "");
+        this(new ArrayList<>(), "");
     }
 
     public ChatPanel(List<Object> additionalTools, String extraRules) {
         this.additionalTools = additionalTools;
         this.extraRules = extraRules;
-
+        
         // 1. NetBeans generates the UI here (DO NOT TOUCH)
         initComponents();
 
@@ -56,9 +57,6 @@ public class ChatPanel extends javax.swing.JPanel {
         javax.swing.JPanel blankCard = new javax.swing.JPanel();
         blankCard.setOpaque(true); // Ensure it paints background
         cardsPanel.add(blankCard, "BLANK");
-
-        // Remove the dummy 'messagesPanel' that NetBeans put in the Center
-        leftPanel.remove(messagesPanel);
         
         rightPanel.setMinimumSize(new java.awt.Dimension(0, 0));
         
@@ -479,7 +477,6 @@ public class ChatPanel extends javax.swing.JPanel {
         newChatBtn = new javax.swing.JButton();
         list = new com.generic.tools.components.list.UIList();
         leftPanel = new javax.swing.JPanel();
-        messagesPanel = new com.generic.tools.ai.components.ChatMessagesPanel();
         inputPanel = new com.generic.tools.ai.components.ChatInputPanel();
         topPanel = new javax.swing.JPanel();
         modelList = new javax.swing.JComboBox<>();
@@ -504,7 +501,6 @@ public class ChatPanel extends javax.swing.JPanel {
         splitPane.setRightComponent(rightPanel);
 
         leftPanel.setLayout(new java.awt.BorderLayout());
-        leftPanel.add(messagesPanel, java.awt.BorderLayout.CENTER);
         leftPanel.add(inputPanel, java.awt.BorderLayout.PAGE_END);
 
         topPanel.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
@@ -539,7 +535,6 @@ public class ChatPanel extends javax.swing.JPanel {
     private com.generic.tools.ai.components.ChatInputPanel inputPanel;
     private javax.swing.JPanel leftPanel;
     private com.generic.tools.components.list.UIList list;
-    private com.generic.tools.ai.components.ChatMessagesPanel messagesPanel;
     private javax.swing.JComboBox<String> modelList;
     private javax.swing.JButton newChatBtn;
     private javax.swing.JPanel rightPanel;

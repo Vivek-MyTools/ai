@@ -27,7 +27,7 @@ public class ChatMessageWindow {
         this.chatMessagesPanel = chatMessagesPanel;
         this.customSystemRules = extraRules != null ? extraRules : "";
         if(additionalTools != null) {
-            externalTools.addAll(externalTools);
+            externalTools.addAll(additionalTools);
         }
         
         newAgent();
@@ -40,8 +40,8 @@ public class ChatMessageWindow {
             String fullSystemPrompt = SuperAgentFactory.DEFAULT_SYSTEM_PROMPT;
             if (!customSystemRules.isEmpty()) {
                 fullSystemPrompt += "\n" + customSystemRules;
-            }
-
+            }            
+            
             chatAgent = factory.createSuperAgent(
                     knowledgeBase,
                     fullSystemPrompt,

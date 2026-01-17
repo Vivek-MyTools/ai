@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-import javax.swing.BoxLayout;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JFileChooser;
@@ -212,7 +211,8 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         chatPane.setForeground(fg);
 
         StyledDocument doc = chatPane.getStyledDocument();
-        String mainFontName = ChatThemeUtils.getUnicodeFontName();
+        //String mainFontName = ChatThemeUtils.getUnicodeFontName();
+        String mainFontName = java.awt.Font.DIALOG;
         int fontSize = 14;
 
         agentName = chatPane.addStyle("AgentName", null);
