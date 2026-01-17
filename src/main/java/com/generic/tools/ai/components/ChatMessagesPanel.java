@@ -1,5 +1,6 @@
 package com.generic.tools.ai.components;
 
+import com.generic.tools.ai.helper.ChatMessageData;
 import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
@@ -9,8 +10,11 @@ import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.io.File;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import javax.swing.BoxLayout;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
 import javax.swing.JFileChooser;
@@ -54,6 +58,8 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     private Style agentName, agentMsg, userName, userMsg;
     private Style agentMsgBold, agentMsgItalic; 
     private Style linkStyle;
+    
+    private List<ChatMessageData> messageHistory = new ArrayList<>();
 
     public ChatMessagesPanel() {
         initComponents();
@@ -64,6 +70,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         setupLinkListener();
         javax.swing.SwingUtilities.invokeLater(this::initStyles);
         setupExportMenu();
+        
     }
     
     private void setupExportMenu() {
@@ -158,6 +165,37 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             userIcon = null;
         }
     }
+    
+    public List<ChatMessageData> getMessageHistory() {
+        return messageHistory;
+    }
+    
+    public void loadHistory(List<ChatMessageData> history) {
+        // 1. Clear Data
+        this.messageHistory.clear();
+
+        // 2. Remove UI Components
+        this.removeAll();
+
+        // 3. Re-Add UI Components
+        for (ChatMessageData msg : history) {
+            if ("USER".equals(msg.role)) {
+                addUserMessage(msg.content);
+            } else {
+                addAgentMessage(msg.content);
+            }
+        }
+
+        // 4. IMPORTANT: Force ScrollPane update if this panel is inside one
+        if (this.getParent() instanceof javax.swing.JViewport) {
+            this.getParent().revalidate();
+            this.getParent().repaint();
+        }
+
+        // 5. Standard Refresh
+        this.revalidate();
+        this.repaint();
+    }
 
     public void initStyles() {
         Point savedViewPos = null;
@@ -220,6 +258,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
 
     public void addUserMessage(String msg) {
+        messageHistory.add(new ChatMessageData("USER", msg));
         this.lastConversationIndex = chatPane.getDocument().getLength();
         JPanel userBubble = MessageBubbleFactory.createBubble(
                 msg,
@@ -234,6 +273,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
 
     public void addAgentMessage(String msg) {
+        messageHistory.add(new ChatMessageData("AGENT", msg));
         append("\nAgent: ", agentName);
         parseAndAppend(msg);
         append("\n\n", agentMsg);
