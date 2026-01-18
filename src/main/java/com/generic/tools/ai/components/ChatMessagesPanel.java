@@ -76,7 +76,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     private void setupExportMenu() {
         JPopupMenu popup = new JPopupMenu();
         JMenuItem exportItem = new JMenuItem("Export Chat to PDF");
-        
+        LnfTheme.getInstance().addComponent(popup);
         exportItem.addActionListener(e -> {
             JFileChooser fileChooser = new JFileChooser();
             fileChooser.setDialogTitle("Save PDF");

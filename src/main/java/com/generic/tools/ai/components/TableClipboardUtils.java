@@ -1,14 +1,13 @@
 package com.generic.tools.ai.components;
 
+import com.generic.tools.lnf.theme.LnfTheme;
 import java.awt.Toolkit;
-import java.awt.datatransfer.Clipboard;
 import java.awt.datatransfer.DataFlavor;
 import java.awt.datatransfer.StringSelection;
 import java.awt.datatransfer.Transferable;
 import java.awt.datatransfer.UnsupportedFlavorException;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-import java.io.IOException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.JComponent;
@@ -17,23 +16,76 @@ import javax.swing.JPopupMenu;
 
 public class TableClipboardUtils {
 
+    // Singleton UI elements
+    private static JPopupMenu sharedPopup;
+    private static String activeMarkdownPayload; // Holds data for the currently clicked table
+    
+    // Keys for component tagging
+    private static final String KEY_LISTENER_ATTACHED = "TableUtils_ListenerAttached";
+    private static final String KEY_MARKDOWN_DATA = "TableUtils_MarkdownData";
+
+    /**
+     * Attaches the context menu. 
+     * Safe to call multiple times on the same component (updates data, doesn't duplicate listeners).
+     */
     public static void attachCopyMenu(JComponent component, String rawMarkdown) {
-        JPopupMenu popup = new JPopupMenu();
-        JMenuItem copyMd = new JMenuItem("Copy Table (Markdown)");
-        copyMd.addActionListener(e -> copyToClipboard(rawMarkdown));
-        JMenuItem copyHtml = new JMenuItem("Copy for Word/Excel");
-        copyHtml.addActionListener(e -> {
-            String flattened = flattenLatex(rawMarkdown.trim());
-            copyHtmlToClipboard(convertToHtml(flattened), convertToTsv(flattened));
-        });
-        popup.add(copyMd); popup.add(copyHtml);
-        component.addMouseListener(new MouseAdapter() {
-            public void mousePressed(MouseEvent e) { if (e.isPopupTrigger()) popup.show(e.getComponent(), e.getX(), e.getY()); }
-            public void mouseReleased(MouseEvent e) { if (e.isPopupTrigger()) popup.show(e.getComponent(), e.getX(), e.getY()); }
-        });
+        // 1. Store the specific data into the component itself
+        component.putClientProperty(KEY_MARKDOWN_DATA, rawMarkdown);
+
+        // 2. Only add the listener if it hasn't been added yet
+        if (component.getClientProperty(KEY_LISTENER_ATTACHED) == null) {
+            component.addMouseListener(new MouseAdapter() {
+                private void handleEvent(MouseEvent e) {
+                    if (e.isPopupTrigger()) {
+                        showPopup(e);
+                    }
+                }
+                public void mousePressed(MouseEvent e) { handleEvent(e); }
+                public void mouseReleased(MouseEvent e) { handleEvent(e); }
+            });
+            component.putClientProperty(KEY_LISTENER_ATTACHED, Boolean.TRUE);
+        }
     }
 
-    // Fixes LaTeX breaking tables
+    private static void showPopup(MouseEvent e) {
+        JComponent c = (JComponent) e.getComponent();
+        Object data = c.getClientProperty(KEY_MARKDOWN_DATA);
+
+        if (data instanceof String) {
+            // Update the shared state
+            activeMarkdownPayload = (String) data;
+            
+            // Lazy load the popup once
+            if (sharedPopup == null) {
+                initPopup();
+            }
+            sharedPopup.show(c, e.getX(), e.getY());
+        }
+    }
+
+    private static void initPopup() {
+        sharedPopup = new JPopupMenu();
+        LnfTheme.getInstance().addComponent(sharedPopup);
+        JMenuItem copyMd = new JMenuItem("Copy Table (Markdown)");
+        copyMd.addActionListener(ev -> {
+            if (activeMarkdownPayload != null) copyToClipboard(activeMarkdownPayload);
+        });
+
+        JMenuItem copyHtml = new JMenuItem("Copy for Word/Excel");
+        copyHtml.addActionListener(ev -> {
+            if (activeMarkdownPayload != null) {
+                String flattened = flattenLatex(activeMarkdownPayload.trim());
+                copyHtmlToClipboard(convertToHtml(flattened), convertToTsv(flattened));
+            }
+        });
+
+        sharedPopup.add(copyMd);
+        sharedPopup.add(copyHtml);
+    }
+
+    // --- Utility Methods (Kept Public/Private as in original) ---
+
+    // Fixes LaTeX breaking tables (Public as requested)
     public static String flattenLatex(String text) {
         Pattern p = Pattern.compile("(?s)(\\$\\$.*?\\$\\$|\\\\\\\\\\[.*?\\\\\\\\])");
         Matcher m = p.matcher(text);
@@ -47,10 +99,12 @@ public class TableClipboardUtils {
         StringSelection s = new StringSelection(text);
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(s, s);
     }
+
     private static void copyHtmlToClipboard(String html, String plain) {
         HtmlTransferable t = new HtmlTransferable(html, plain);
         Toolkit.getDefaultToolkit().getSystemClipboard().setContents(t, null);
     }
+
     private static String convertToTsv(String md) {
         StringBuilder sb = new StringBuilder();
         for (String line : md.split("\\n")) {
@@ -62,6 +116,7 @@ public class TableClipboardUtils {
         }
         return sb.toString();
     }
+
     private static String convertToHtml(String md) {
         StringBuilder sb = new StringBuilder("<html><body><table border='1' style='border-collapse:collapse;font-family:sans-serif;'>");
         int r=0;
