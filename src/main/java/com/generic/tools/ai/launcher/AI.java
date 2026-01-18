@@ -16,6 +16,14 @@ public class AI extends javax.swing.JFrame implements ThemeChangeListener{
         ThemeHelper.getInstance().addThemesToMenu(theme, null);        
         LnfTheme.getInstance().addComponents(new Component[]{this,chatPanel}).apply();
         LnfTheme.getInstance().register(this);
+        
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> {
+            System.out.println("🛑 App shutting down. Saving chats...");
+
+            // Get data from panel
+            chatPanel.saveAllChats();
+            
+        }));
     }
 
     /**
@@ -73,7 +81,7 @@ public class AI extends javax.swing.JFrame implements ThemeChangeListener{
         /* Create and display the form */
         java.awt.EventQueue.invokeLater(new Runnable() {
             public void run() {
-                new AI().setVisible(true);
+                new AI().setVisible(true);         
             }
         });
     }

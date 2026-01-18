@@ -8,7 +8,7 @@ import java.util.List;
 
 public class ChatHistoryManager {
 
-    private static final String FILE_PATH = System.getProperty("user.home") + "/.generic_ai_tools/chat_history.dat";
+    private static final String FILE_PATH = System.getProperty("user.home") + "/.chats/chat_history.dat";
 
     public static void saveChats(List<ChatSession> sessions) {
         try {
@@ -23,16 +23,25 @@ public class ChatHistoryManager {
         }
     }
 
-    @SuppressWarnings("unchecked")
-    public static List<ChatSession> loadChats() {
-        if (!Files.exists(Paths.get(FILE_PATH))) {
+     public static List<ChatSession> loadChats() {
+        java.nio.file.Path path = java.nio.file.Paths.get(FILE_PATH);
+        if (!java.nio.file.Files.exists(path)) {
             return new ArrayList<>();
         }
 
-        try (ObjectInputStream ois = new ObjectInputStream(new FileInputStream(FILE_PATH))) {
+        try (java.io.ObjectInputStream ois = new java.io.ObjectInputStream(new java.io.FileInputStream(FILE_PATH))) {
             return (List<ChatSession>) ois.readObject();
-        } catch (IOException | ClassNotFoundException e) {
-            e.printStackTrace();
+        } catch (Exception e) {
+            // This catches StreamCorruptedException, InvalidClassException, ClassNotFoundException, etc.
+            System.err.println("⚠️ Warning: Chat history is incompatible or corrupted. Resetting history.");
+            System.err.println("   -> Reason: " + e.getMessage());
+
+            // Optional: Delete the bad file immediately so it doesn't annoy you next time
+            try {
+                java.nio.file.Files.deleteIfExists(path);
+            } catch (java.io.IOException ignored) {
+            }
+
             return new ArrayList<>();
         }
     }

@@ -85,8 +85,7 @@ public class ChatPanel extends javax.swing.JPanel {
             // --------------------
         });
 
-        // Auto-save on exit
-        Runtime.getRuntime().addShutdownHook(new Thread(this::saveAllChats));
+       
     }
     
     // Helper to add a window to the CardLayout stack
@@ -332,24 +331,21 @@ public class ChatPanel extends javax.swing.JPanel {
         });
     }
     
-    // Add this helper method in ChatPanel
-    private void saveAllChats() {
+    public void saveAllChats() {
+        
         List<ChatSession> sessionsToSave = new ArrayList<>();
 
-        // Iterate over the Map of chat panels
         for (Map.Entry<String, ChatMessageWindow> entry : chatPanels.entrySet()) {
             String chatName = entry.getKey();
             ChatMessageWindow window = entry.getValue();
 
-            // Create session object
             ChatSession session = new ChatSession(chatName, window.getModel());
-
-            // Extract messages
             session.messages = window.getChatMessagesPanel().getMessageHistory();
 
             sessionsToSave.add(session);
         }
-
+        
+        // This method is still responsible for writing to disk
         ChatHistoryManager.saveChats(sessionsToSave);
     }
     
