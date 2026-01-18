@@ -334,9 +334,9 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
                 Component tableComp = TableBlockFactory.createTable(tableRaw, chatPane.getBackground());
                 
-                JPanel wrapper = new JPanel(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT, 0, 0));
-                wrapper.setOpaque(false); // Make wrapper transparent
-                wrapper.add(tableComp);               
+                JPanel wrapper = new JPanel(new java.awt.BorderLayout());
+                wrapper.setOpaque(false);
+                wrapper.add(tableComp, java.awt.BorderLayout.CENTER);                
                 insertComponent(wrapper);
                 append("\n", agentMsg);
             }
