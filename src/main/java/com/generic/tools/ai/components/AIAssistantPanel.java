@@ -318,7 +318,7 @@ public class AIAssistantPanel extends javax.swing.JPanel {
                     (knowledgeBase != null ? " with docs = " + knowledgeBase : "") +
                     "\n"
                 );
-                SuperAgentFactory factory = new SuperAgentFactory("http://localhost:11434", model);
+                SuperAgentFactory factory = new SuperAgentFactory(model);
                 
                 
                 String fullSystemPrompt = SuperAgentFactory.DEFAULT_SYSTEM_PROMPT;

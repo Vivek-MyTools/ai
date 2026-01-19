@@ -170,16 +170,11 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         return messageHistory;
     }
 
-   public void loadHistory(List<ChatMessageData> history) {
-        // 1. DO NOT call this.removeAll(). It kills the ScrollPane.
-        // Instead, clear the TextPane content.
-        chatPane.setText(""); 
+   public void loadHistory(List<ChatMessageData> history) {        
+        chatPane.setText("");        
         
-        // 2. Clear the internal history list so we don't duplicate data
-        // (Because addAgentMessage/addUserMessage adds to the list again)
         this.messageHistory.clear();
 
-        // 3. Re-create content
         for (ChatMessageData msg : history) {
             if ("USER".equals(msg.role)) {
                 addUserMessage(msg.content);
@@ -187,8 +182,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 addAgentMessage(msg.content);
             }
         }
-        
-        // 4. Scroll to bottom
+                
         javax.swing.SwingUtilities.invokeLater(() -> {
              if (jScrollPane1.getVerticalScrollBar() != null) {
                  jScrollPane1.getVerticalScrollBar().setValue(

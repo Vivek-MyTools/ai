@@ -35,7 +35,7 @@ public class ChatMessageWindow {
     
     public void newAgent() {
         UIBackgroundTaskExecutor.run(() -> {
-            SuperAgentFactory factory = new SuperAgentFactory("http://localhost:11434", model);
+            SuperAgentFactory factory = new SuperAgentFactory(model);
 
             String fullSystemPrompt = SuperAgentFactory.DEFAULT_SYSTEM_PROMPT;
             if (!customSystemRules.isEmpty()) {

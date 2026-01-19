@@ -1,5 +1,6 @@
 package com.generic.tools.ai.components;
 
+import com.generic.tools.ai.TitleGenerator;
 import com.generic.tools.ai.helper.ChatHistoryManager;
 import com.generic.tools.ai.helper.ChatSession;
 
@@ -245,43 +246,89 @@ public class ChatPanel extends javax.swing.JPanel {
     private void handleAutoRename(String userText) {
         String currentName = list.getList().getSelectedValue();
 
-        // Only rename if it is a default "New Chat"
-        if (currentName != null && currentName.startsWith(NEW_CHAT_PREFIX)) {
+        // Only generate a smart title if:
+        // 1. It is currently a default "New Chat"
+        // 2. The user text is meaningful (not empty)
+        if (currentName != null && currentName.startsWith(NEW_CHAT_PREFIX) && !userText.trim().isEmpty()) {
+            
+            // Capture the model to use for generation (use the one currently selected)
+            String modelForTitle = (String) modelList.getSelectedItem();
+            
+            // --- START BACKGROUND TASK ---
+            new javax.swing.SwingWorker<String, Void>() {
+                @Override
+                protected String doInBackground() throws Exception {
+                    // This runs on a background thread.
+                    // It creates a temporary TitleGenerator just for this task.
+                    TitleGenerator generator = new TitleGenerator(modelForTitle);
+                    return generator.generateTitle(userText);
+                }
 
-            // 1. Generate New Name
-            String newName = userText.trim();
-            if (newName.length() > 20) {
-                newName = newName.substring(0, 20) + "...";
-            }
-
-            // 2. Handle Duplicates
-            int dup = 1;
-            String base = newName;
-            while (chatPanels.containsKey(newName)) {
-                newName = base + " (" + (++dup) + ")";
-            }
-
-            // 3. Update the Map
-            ChatMessageWindow win = chatPanels.remove(currentName);
-            chatPanels.put(newName, win);
-
-            // 4. Update the List
-            javax.swing.DefaultListModel<String> model = (javax.swing.DefaultListModel<String>) list.getList().getModel();
-            int idx = list.getList().getSelectedIndex();
-            if (idx != -1) {
-                model.set(idx, newName);
-            }
-
-            // 5. CRITICAL FIX: Update CardLayout Registry
-            // We re-add the component to the cardsPanel with the NEW NAME.
-            // This effectively "renames" the card in the layout manager.
-            cardsPanel.add(win.getChatMessagesPanel(), newName);
-
-            // 6. Show the card immediately to ensure it stays visible
-            cardLayout.show(cardsPanel, newName);
+                @Override
+                protected void done() {
+                    try {
+                        // This runs on the UI Thread (EDT) when finished.
+                        String smartTitle = get(); // Retrieve the result
+                        
+                        // Perform the actual rename in the UI
+                        performRename(currentName, smartTitle);
+                        
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                        // If it fails, fallback to simple truncation or keep "New Chat"
+                        // Optional: performRename(currentName, userText.substring(0, 15) + "...");
+                    }
+                }
+            }.execute();
         }
     }
+    
+    private void performRename(String oldName, String newName) {
+        // 1. Handle Duplicates
+        int dup = 1;
+        String base = newName;
+        while (chatPanels.containsKey(newName)) {
+            newName = base + " (" + (++dup) + ")";
+        }
 
+        // Safety check: ensure the old chat still exists (user didn't delete it while waiting)
+        if (!chatPanels.containsKey(oldName)) return;
+
+        // 2. Update the Map
+        ChatMessageWindow win = chatPanels.remove(oldName);
+        chatPanels.put(newName, win);
+
+        // 3. Update the List
+        javax.swing.DefaultListModel<String> model = (javax.swing.DefaultListModel<String>) list.getList().getModel();
+        int idx = list.getList().getSelectedIndex();
+        
+        // Find the index of the old name in case selection changed
+        if (idx == -1 || !model.get(idx).equals(oldName)) {
+            for(int i=0; i<model.size(); i++) {
+                if(model.get(i).equals(oldName)) {
+                    idx = i;
+                    break;
+                }
+            }
+        }
+        
+        if (idx != -1) {
+            model.set(idx, newName);
+        }
+
+        // 4. Update CardLayout Registry
+        // We add the component again under the new name so CardLayout can find it
+        cardsPanel.add(win.getChatMessagesPanel(), newName);
+        
+        // 5. If this was the active chat, ensure it stays visible
+        if (currentMessageWindow == win) {
+            cardLayout.show(cardsPanel, newName);
+        }
+        
+        // 6. Persist the change
+        saveAllChats();
+    }
+    
     private void runAgentTask(String userText, Object token, ChatMessageWindow targetWindow) {
         try {
             if (Thread.currentThread().isInterrupted()) return;
