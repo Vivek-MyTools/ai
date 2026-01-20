@@ -384,8 +384,6 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         chatPane.setBackground(currentBg);
         chatPane.setForeground(currentFg);
 
-        boolean isDark = ChatThemeUtils.isDarkTheme(currentBg);
-
         for (int i = 0; i < root.getElementCount(); i++) {
             Element line = root.getElement(i);
             for (int j = 0; j < line.getElementCount(); j++) {
@@ -393,156 +391,112 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 AttributeSet attrs = leaf.getAttributes();
                 Component comp = StyleConstants.getComponent(attrs);
 
-                // FIX: Use JComponent to handle JPanel AND JScrollPane
                 if (comp instanceof JComponent) {
-                    JComponent panel = (JComponent) comp;
-
-                    // Unwrap wrapper containers
-                    if (panel.getClientProperty("isCodeBlock") == null
-                            && panel.getClientProperty("isTableBlock") == null
-                            && panel.getClientProperty("isUserBubble") == null
-                            && panel.getComponentCount() > 0
-                            && panel.getComponent(0) instanceof JComponent) {
-                        panel = (JComponent) panel.getComponent(0);
-                    }
-
-                    // --- 1. CODE BLOCK REFRESH ---
-                    if (panel.getClientProperty("isCodeBlock") != null) {
-                        String rawCode = (String) panel.getClientProperty("rawCode");
-                        Color codeBg = ChatThemeUtils.getCodeBackgroundColor(currentBg);
-                        Color borderCol = isDark ? codeBg.brighter() : codeBg.darker();
-
-                        // A. Update Wrapper
-                        panel.setBackground(codeBg);
-                        panel.setBorder(javax.swing.BorderFactory.createLineBorder(borderCol, 1));
-
-                        // B. Iterate Children to find Editor AND Header
-                        for (Component child : panel.getComponents()) {
-                            // 1. The Code Editor
-                            if (child instanceof JTextPane) {
-                                JTextPane innerPane = (JTextPane) child;
-                                innerPane.setBackground(codeBg);
-                                innerPane.setForeground(currentFg);
-                                CodeBlockFactory.highlightCode(innerPane, rawCode, isDark);
-                            }
-                            // 2. The Header Panel (Copy Bar)
-                            else if (child instanceof JPanel) {
-                                JPanel header = (JPanel) child;
-                                
-                                // DYNAMIC COLOR: Blend slightly with white (Dark Mode) or black (Light Mode)
-                                Color headerBg;
-                                if (isDark) {
-                                    headerBg = new Color(
-                                        Math.min(255, codeBg.getRed() + 25), 
-                                        Math.min(255, codeBg.getGreen() + 25), 
-                                        Math.min(255, codeBg.getBlue() + 25)
-                                    );
-                                } else {
-                                    headerBg = new Color(
-                                        Math.max(0, codeBg.getRed() - 15), 
-                                        Math.max(0, codeBg.getGreen() - 15), 
-                                        Math.max(0, codeBg.getBlue() - 15)
-                                    );
-                                }
-                                header.setBackground(headerBg);
-                                
-                                // Update Labels inside Header ("Code" and "Copy")
-                                for (Component headerComp : header.getComponents()) {
-                                    if (headerComp instanceof javax.swing.JLabel) {
-                                        javax.swing.JLabel label = (javax.swing.JLabel) headerComp;
-                                        String text = label.getText();
-                                        if ("Code".equals(text)) {
-                                            label.setForeground(isDark ? Color.LIGHT_GRAY : Color.DARK_GRAY);
-                                        } else if (text != null && (text.contains("Copy") || text.contains("Copied"))) {
-                                            label.setForeground(isDark ? Color.WHITE : Color.BLACK);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    } 
-                    // --- 2. USER BUBBLE REFRESH ---
-                    else if (panel.getClientProperty("isUserBubble") != null && panel instanceof JPanel) {
-                        MessageBubbleFactory.applyTheme((JPanel) panel, currentBg);
-                    }
-                    // --- 3. TABLE BLOCK REFRESH ---
-                    else {
-                         // Search for Grid Panel (it might be inside a JScrollPane)
-                        JPanel gridPanel = null;
-                        if (Boolean.TRUE.equals(panel.getClientProperty("isTableBlock")) && panel instanceof JPanel) {
-                            gridPanel = (JPanel) panel;
-                        } 
-                        else if (panel instanceof JScrollPane) {
-                            Component view = ((JScrollPane) panel).getViewport().getView();
-                            if (view instanceof JPanel) gridPanel = (JPanel) view;
-                        }
-
-                        if (gridPanel != null) {
-                            Color borderColor = ChatThemeUtils.getTableBorderColor(currentBg);
-                            gridPanel.setBackground(borderColor);
-                            gridPanel.setBorder(javax.swing.BorderFactory.createLineBorder(borderColor, 1));
-                            
-                            Color headerBg = ChatThemeUtils.getTableHeaderColor(currentBg);
-                            Color cellBg   = ChatThemeUtils.getTableCellColor(currentBg);
-                            Color textColor = ChatThemeUtils.getContrastingTextColor(cellBg);
-
-                            for (Component cell : gridPanel.getComponents()) {
-                                if (cell instanceof JPanel) {
-                                    JPanel cellPanel = (JPanel) cell;
-                                    if (Boolean.TRUE.equals(cellPanel.getClientProperty("isTableHeader"))) {
-                                        cellPanel.setBackground(headerBg);
-                                    } else {
-                                        cellPanel.setBackground(cellBg);
-                                    }
-
-                                    if (cellPanel.getComponentCount() > 0 && cellPanel.getComponent(0) instanceof JTextPane) {
-                                        JTextPane textPane = (JTextPane) cellPanel.getComponent(0);
-                                        textPane.setForeground(textColor);
-                                        
-                                        StyledDocument cellDoc = textPane.getStyledDocument();
-                                        SimpleAttributeSet colorAttr = new SimpleAttributeSet();
-                                        StyleConstants.setForeground(colorAttr, textColor);
-                                        
-                                        int len = cellDoc.getLength();
-                                        int pos = 0;
-                                        while (pos < len) {
-                                            Element elem = cellDoc.getCharacterElement(pos);
-                                            AttributeSet elemAttrs = elem.getAttributes();
-                                            int end = elem.getEndOffset();
-                                            
-                                            if (elemAttrs.getAttribute("LatexRaw") != null) {
-                                                String rawMath = (String) elemAttrs.getAttribute("LatexRaw");
-                                                String contentMath = (String) elemAttrs.getAttribute("LatexContent");
-                                                Icon newIcon = MathRenderer.latexToIcon(rawMath, contentMath, textColor);
-                                                if (newIcon != null) {
-                                                    SimpleAttributeSet newAttrs = new SimpleAttributeSet(elemAttrs);
-                                                    StyleConstants.setIcon(newAttrs, newIcon);
-                                                    cellDoc.setCharacterAttributes(pos, end - pos, newAttrs, false);
-                                                }
-                                            } else if (!StyleConstants.isUnderline(elemAttrs)) {
-                                                cellDoc.setCharacterAttributes(pos, end - pos, colorAttr, false);
-                                            }
-                                            pos = end;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    processComponentBlock((JComponent) comp, currentBg, currentFg);
                 } 
-                // --- 4. MAIN CHAT LATEX REFRESH ---
                 else if (attrs.getAttribute("LatexRaw") != null) {
-                    String rawMath = (String) attrs.getAttribute("LatexRaw");
-                    String contentMath = (String) attrs.getAttribute("LatexContent");
-                    Icon newIcon = MathRenderer.latexToIcon(rawMath, contentMath, currentFg);
-                    
-                    if (newIcon != null) {
-                        SimpleAttributeSet newAttrs = new SimpleAttributeSet(attrs);
-                        StyleConstants.setIcon(newAttrs, newIcon);
-                        doc.setCharacterAttributes(leaf.getStartOffset(), leaf.getEndOffset() - leaf.getStartOffset(), newAttrs, false);
-                    }
+                    processMainChatLatex(doc, leaf, attrs, currentFg);
                 }
             }
+        }
+    }
+
+    private void processComponentBlock(JComponent panel, Color currentBg, Color currentFg) {
+        // Unwrap wrappers (e.g., Table wrapper or simple containers)
+        if (panel.getClientProperty("isCodeBlock") == null
+                && panel.getClientProperty("isTableBlock") == null
+                && panel.getClientProperty("isUserBubble") == null
+                && panel.getComponentCount() > 0
+                && panel.getComponent(0) instanceof JComponent) {
+            panel = (JComponent) panel.getComponent(0);
+        }
+
+        // Delegate to specific handlers
+        if (panel.getClientProperty("isCodeBlock") != null) {
+            CodeBlockFactory.refreshCodeBlock((JPanel) panel, currentBg, currentFg);
+        } 
+        else if (panel.getClientProperty("isUserBubble") != null && panel instanceof JPanel) {
+            MessageBubbleFactory.applyTheme((JPanel) panel, currentBg);
+        } 
+        else {
+            // Check for Table (might be JPanel or JScrollPane)
+            JPanel gridPanel = null;
+            if (Boolean.TRUE.equals(panel.getClientProperty("isTableBlock")) && panel instanceof JPanel) {
+                gridPanel = (JPanel) panel;
+            } else if (panel instanceof JScrollPane) {
+                Component view = ((JScrollPane) panel).getViewport().getView();
+                if (view instanceof JPanel) gridPanel = (JPanel) view;
+            }
+
+            if (gridPanel != null) {
+                refreshTableBlock(gridPanel, currentBg);
+            }
+        }
+    }
+
+    private void refreshTableBlock(JPanel gridPanel, Color currentBg) {
+        Color borderColor = ChatThemeUtils.getTableBorderColor(currentBg);
+        gridPanel.setBackground(borderColor);
+        gridPanel.setBorder(javax.swing.BorderFactory.createLineBorder(borderColor, 1));
+        
+        Color headerBg = ChatThemeUtils.getTableHeaderColor(currentBg);
+        Color cellBg   = ChatThemeUtils.getTableCellColor(currentBg);
+        Color textColor = ChatThemeUtils.getContrastingTextColor(cellBg);
+
+        for (Component cell : gridPanel.getComponents()) {
+            if (cell instanceof JPanel) {
+                JPanel cellPanel = (JPanel) cell;
+                boolean isHeader = Boolean.TRUE.equals(cellPanel.getClientProperty("isTableHeader"));
+                cellPanel.setBackground(isHeader ? headerBg : cellBg);
+
+                if (cellPanel.getComponentCount() > 0 && cellPanel.getComponent(0) instanceof JTextPane) {
+                    JTextPane textPane = (JTextPane) cellPanel.getComponent(0);
+                    textPane.setForeground(textColor);
+                    
+                    // Refresh LaTeX inside Table Cells
+                    refreshLatexInDocument(textPane.getStyledDocument(), textColor);
+                }
+            }
+        }
+    }
+
+    private void processMainChatLatex(StyledDocument doc, Element leaf, AttributeSet attrs, Color currentFg) {
+        String rawMath = (String) attrs.getAttribute("LatexRaw");
+        String contentMath = (String) attrs.getAttribute("LatexContent");
+        Icon newIcon = MathRenderer.latexToIcon(rawMath, contentMath, currentFg);
+        
+        if (newIcon != null) {
+            SimpleAttributeSet newAttrs = new SimpleAttributeSet(attrs);
+            StyleConstants.setIcon(newAttrs, newIcon);
+            doc.setCharacterAttributes(leaf.getStartOffset(), leaf.getEndOffset() - leaf.getStartOffset(), newAttrs, false);
+        }
+    }
+
+    // Reuse logic for both Main Chat and Table Cells
+    private void refreshLatexInDocument(StyledDocument doc, Color textColor) {
+        int len = doc.getLength();
+        int pos = 0;
+        SimpleAttributeSet colorAttr = new SimpleAttributeSet();
+        StyleConstants.setForeground(colorAttr, textColor);
+
+        while (pos < len) {
+            Element elem = doc.getCharacterElement(pos);
+            AttributeSet elemAttrs = elem.getAttributes();
+            int end = elem.getEndOffset();
+            
+            if (elemAttrs.getAttribute("LatexRaw") != null) {
+                String rawMath = (String) elemAttrs.getAttribute("LatexRaw");
+                String contentMath = (String) elemAttrs.getAttribute("LatexContent");
+                Icon newIcon = MathRenderer.latexToIcon(rawMath, contentMath, textColor);
+                if (newIcon != null) {
+                    SimpleAttributeSet newAttrs = new SimpleAttributeSet(elemAttrs);
+                    StyleConstants.setIcon(newAttrs, newIcon);
+                    doc.setCharacterAttributes(pos, end - pos, newAttrs, false);
+                }
+            } else if (!StyleConstants.isUnderline(elemAttrs)) {
+                doc.setCharacterAttributes(pos, end - pos, colorAttr, false);
+            }
+            pos = end;
         }
     }
    
