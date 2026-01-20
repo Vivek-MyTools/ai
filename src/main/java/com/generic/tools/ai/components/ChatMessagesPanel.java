@@ -322,16 +322,18 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 try { chatPane.getStyledDocument().insertString(chatPane.getDocument().getLength(), title, linkAttrs); } catch (BadLocationException e) {}
             }
             else if (m.group(8) != null) {
-                // Table
                 String tableRaw = m.group(8);
                 append("\n", agentMsg);
 
+                // This now returns a JScrollPane
                 Component tableComp = TableBlockFactory.createTable(tableRaw, chatPane.getBackground());
-                
+
+                // Use BorderLayout to allow the ScrollPane to expand
                 JPanel wrapper = new JPanel(new java.awt.BorderLayout());
                 wrapper.setOpaque(false);
-                wrapper.add(tableComp, java.awt.BorderLayout.CENTER);                
+                wrapper.add(tableComp, java.awt.BorderLayout.CENTER);
                 insertComponent(wrapper);
+
                 append("\n", agentMsg);
             }
             
