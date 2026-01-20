@@ -41,14 +41,16 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
     private int lastConversationIndex = 0;
 
+   // --- MASTER REGEX PATTERN ---
     private static final Pattern MASTER_PATTERN = Pattern.compile(
-            "(?s)```(\\w*)\\n?(.*?)```|" +                                         // 1-2: Code
+            "(?s)```(\\w*)\\n?(.*?)```|" +                                              // 1-2: Code
             "(\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]|" +    // 3: Display Math
-            "\\$(?!\\{)([^$]+?)\\$)|" +                                              // 4: Inline Math
-            "<?(https?://[\\w\\-\\._~:/?#\\[\\]@!\\$&'\\(\\)\\*\\+,;=]+)>?|" +       // 5: Raw URL
-            "\\[(.*?)\\]\\((https?://.*?)\\)|" +                                     // 6-7: Md Link
-            // TABLE REGEX:
-            "((?-s)(?:(?:^|\\n)[^\\n]*\\|[^\\n]*\\n)+(?:[^\\n]*\\|[-:| ]+\\|?[^\\n]*\\n)(?:[^\\n]*\\|[^\\n]*(?:\\n|$))*)" 
+            "\\$(?!\\{)([^$]+?)\\$)|" +                                                 // 4: Inline Math
+            // 5: Video (More robust: allow params like ?v=1 at end, though mainly extensions)
+            "((?:https?://|file:/|/|[a-zA-Z]:\\\\)[^\\s<>]+\\.(?:mp4|webm|mkv))|" + 
+            "<?(https?://[\\w\\-\\._~:/?#\\[\\]@!\\$&'\\(\\)\\*\\+,;=]+)>?|" +          // 6: Raw URL
+            "\\[(.*?)\\]\\((https?://.*?)\\)|" +                                        // 7-8: Md Link
+            "((?-s)(?:(?:^|\\n)[^\\n]*\\|[^\\n]*\\n)+(?:[^\\n]*\\|[-:| ]+\\|?[^\\n]*\\n)(?:[^\\n]*\\|[^\\n]*(?:\\n|$))*)" // 9: Table
     );
     
     private static final Pattern TEXT_FORMAT_PATTERN = Pattern.compile(
@@ -278,73 +280,78 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
 
     // ===== Internal Logic =====
-    private void parseAndAppend(String text) {
+   private void parseAndAppend(String text) {
         if (text == null || text.isEmpty()) return;
-
-        // FIX: Sanitize Tofu
+        
+        // Sanitize Tofu
         text = text.replace('\u2011', '-').replace('\u00A0', ' ');
-
+        
         Matcher m = MASTER_PATTERN.matcher(text);
         int lastIndex = 0;
-
+        
         while (m.find()) {
             String preText = text.substring(lastIndex, m.start());
             if (!preText.isEmpty()) appendMarkdownText(preText);
 
-            if (m.group(1) != null || m.group(2) != null) {
-                // Code
+            // Group 1-2: Code Block
+            if (m.group(1) != null || m.group(2) != null) { 
                 String content = m.group(2).trim();
                 append("\n", agentMsg);
                 insertComponent(CodeBlockFactory.createCodeComponent(content, chatPane.getBackground(), chatPane.getForeground()));
                 append("\n", agentMsg);
             } 
+            // Group 3-4: Math
             else if (m.group(3) != null || m.group(4) != null) { 
-                // Math
                 String mathRaw = (m.group(3) != null) ? m.group(3) : m.group(4);
                 String mathContent = MathRenderer.extractMathContent(mathRaw);
-                
-                // Pass current theme color to renderer
                 Icon icon = MathRenderer.latexToIcon(mathRaw, mathContent); 
-                
-                // Store metadata via new insertIconDirectly signature
                 if (icon != null) insertIconDirectly(icon, mathRaw, mathContent);
                 else append(mathRaw, agentMsg);
             }
+            // Group 5: Video Files
             else if (m.group(5) != null) {
-                // Raw URL
-                append(m.group(5), linkStyle);
-            }
-            else if (m.group(6) != null && m.group(7) != null) {
-                // Markdown Link
-                String title = m.group(6);
-                String url = m.group(7);
-                SimpleAttributeSet linkAttrs = new SimpleAttributeSet(linkStyle);
-                linkAttrs.addAttribute("LinkUrl", url); 
-                linkAttrs.addAttribute("IsLink", true);
-                try { chatPane.getStyledDocument().insertString(chatPane.getDocument().getLength(), title, linkAttrs); } catch (BadLocationException e) {}
-            }
-            else if (m.group(8) != null) {
-                String tableRaw = m.group(8);
+                String videoPath = m.group(5);
                 append("\n", agentMsg);
-
-                // This now returns a JScrollPane
+                // Create the video component (Pure Swing version we built earlier)
+                insertComponent(VideoBlockFactory.createVideoComponent(videoPath));
+                append("\n", agentMsg);
+            }
+            // Group 6: Raw URLs (Generic)
+            else if (m.group(6) != null) { 
+                append(m.group(6), linkStyle);
+            }
+            // Group 7-8: Markdown Links
+            else if (m.group(7) != null && m.group(8) != null) { 
+                String title = m.group(7);
+                String url = m.group(8);
+                // Edge Case: If the markdown link URL is actually a video, override it!
+                if (url.endsWith(".mp4") || url.endsWith(".webm") || url.endsWith(".mkv")) {
+                    append("\n", agentMsg);
+                    insertComponent(VideoBlockFactory.createVideoComponent(url));
+                    append("\n", agentMsg);
+                } else {
+                    SimpleAttributeSet linkAttrs = new SimpleAttributeSet(linkStyle);
+                    linkAttrs.addAttribute("LinkUrl", url); 
+                    linkAttrs.addAttribute("IsLink", true);
+                    try { chatPane.getStyledDocument().insertString(chatPane.getDocument().getLength(), title, linkAttrs); } catch (BadLocationException e) {}
+                }
+            }
+            // Group 9: Tables
+            else if (m.group(9) != null) { 
+                String tableRaw = m.group(9);
+                append("\n", agentMsg);
                 Component tableComp = TableBlockFactory.createTable(tableRaw, chatPane.getBackground());
-
-                // Use BorderLayout to allow the ScrollPane to expand
                 JPanel wrapper = new JPanel(new java.awt.BorderLayout());
                 wrapper.setOpaque(false);
-                wrapper.add(tableComp, java.awt.BorderLayout.CENTER);
+                wrapper.add(tableComp, java.awt.BorderLayout.CENTER);                
                 insertComponent(wrapper);
-
                 append("\n", agentMsg);
             }
             
             lastIndex = m.end();
         }
-
-        if (lastIndex < text.length()) {
-           appendMarkdownText(text.substring(lastIndex));
-        }
+        
+        if (lastIndex < text.length()) appendMarkdownText(text.substring(lastIndex));
     }
     
     private void appendMarkdownText(String text) {
@@ -452,7 +459,6 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 if (cellPanel.getComponentCount() > 0 && cellPanel.getComponent(0) instanceof JTextPane) {
                     JTextPane textPane = (JTextPane) cellPanel.getComponent(0);
                     textPane.setForeground(textColor);
-                    
                     // Refresh LaTeX inside Table Cells
                     refreshLatexInDocument(textPane.getStyledDocument(), textColor);
                 }
