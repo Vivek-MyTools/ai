@@ -17,10 +17,12 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.swing.Icon;
 import javax.swing.ImageIcon;
+import javax.swing.JComponent;
 import javax.swing.JFileChooser;
 import javax.swing.JMenuItem;
 import javax.swing.JPanel;
 import javax.swing.JPopupMenu;
+import javax.swing.JScrollPane;
 import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
 import javax.swing.text.AttributeSet;
@@ -371,7 +373,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         }
     }
     
-    private void refreshAllComponents() {
+   private void refreshAllComponents() {
         StyledDocument doc = chatPane.getStyledDocument();
         Element root = doc.getDefaultRootElement();
 
@@ -379,7 +381,6 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         Color currentBg = ChatThemeUtils.getCanvasBackground();
         Color currentFg = ChatThemeUtils.getCanvasForeground();
         
-        // 2. Apply to chatPane immediately
         chatPane.setBackground(currentBg);
         chatPane.setForeground(currentFg);
 
@@ -392,58 +393,110 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                 AttributeSet attrs = leaf.getAttributes();
                 Component comp = StyleConstants.getComponent(attrs);
 
-                if (comp instanceof JPanel) {
-                    JPanel panel = (JPanel) comp;
+                // FIX: Use JComponent to handle JPanel AND JScrollPane
+                if (comp instanceof JComponent) {
+                    JComponent panel = (JComponent) comp;
 
+                    // Unwrap wrapper containers
                     if (panel.getClientProperty("isCodeBlock") == null
                             && panel.getClientProperty("isTableBlock") == null
                             && panel.getClientProperty("isUserBubble") == null
                             && panel.getComponentCount() > 0
-                            && panel.getComponent(0) instanceof javax.swing.JPanel) {
-
-                        // We found a wrapper! Switch target to the inner child.
-                        panel = (javax.swing.JPanel) panel.getComponent(0);
+                            && panel.getComponent(0) instanceof JComponent) {
+                        panel = (JComponent) panel.getComponent(0);
                     }
 
+                    // --- 1. CODE BLOCK REFRESH ---
                     if (panel.getClientProperty("isCodeBlock") != null) {
-                        JTextPane innerPane = (JTextPane) panel.getComponent(0);
                         String rawCode = (String) panel.getClientProperty("rawCode");
                         Color codeBg = ChatThemeUtils.getCodeBackgroundColor(currentBg);
                         Color borderCol = isDark ? codeBg.brighter() : codeBg.darker();
+
+                        // A. Update Wrapper
                         panel.setBackground(codeBg);
-                        panel.setBorder(javax.swing.BorderFactory.createCompoundBorder(
-                                javax.swing.BorderFactory.createMatteBorder(1, 0, 1, 0, borderCol),
-                                javax.swing.BorderFactory.createEmptyBorder(10, 10, 10, 10)
-                        ));
-                        innerPane.setBackground(codeBg);
-                        innerPane.setForeground(currentFg);
-                        CodeBlockFactory.highlightCode(innerPane, rawCode, isDark);
-                    } 
-                    else if (panel.getClientProperty("isUserBubble") != null) {
-                        MessageBubbleFactory.applyTheme(panel, currentBg);
-                    }
-                    else if (panel.getClientProperty("isTableBlock") != null) {
-                        Color borderColor = ChatThemeUtils.getTableBorderColor(currentBg);
-                        panel.setBackground(borderColor);
-                        panel.setBorder(javax.swing.BorderFactory.createLineBorder(borderColor, 1));
-                        
-                        Color headerBg = ChatThemeUtils.getTableHeaderColor(currentBg);
-                        Color cellBg   = ChatThemeUtils.getTableCellColor(currentBg);
-                        Color textColor = ChatThemeUtils.getContrastingTextColor(cellBg);
+                        panel.setBorder(javax.swing.BorderFactory.createLineBorder(borderCol, 1));
 
-                        for (Component cell : panel.getComponents()) {
-                            if (cell instanceof JPanel) {
-                                JPanel cellPanel = (JPanel) cell;
-                                if (Boolean.TRUE.equals(cellPanel.getClientProperty("isTableHeader"))) {
-                                    cellPanel.setBackground(headerBg);
+                        // B. Iterate Children to find Editor AND Header
+                        for (Component child : panel.getComponents()) {
+                            // 1. The Code Editor
+                            if (child instanceof JTextPane) {
+                                JTextPane innerPane = (JTextPane) child;
+                                innerPane.setBackground(codeBg);
+                                innerPane.setForeground(currentFg);
+                                CodeBlockFactory.highlightCode(innerPane, rawCode, isDark);
+                            }
+                            // 2. The Header Panel (Copy Bar)
+                            else if (child instanceof JPanel) {
+                                JPanel header = (JPanel) child;
+                                
+                                // DYNAMIC COLOR: Blend slightly with white (Dark Mode) or black (Light Mode)
+                                Color headerBg;
+                                if (isDark) {
+                                    headerBg = new Color(
+                                        Math.min(255, codeBg.getRed() + 25), 
+                                        Math.min(255, codeBg.getGreen() + 25), 
+                                        Math.min(255, codeBg.getBlue() + 25)
+                                    );
                                 } else {
-                                    cellPanel.setBackground(cellBg);
+                                    headerBg = new Color(
+                                        Math.max(0, codeBg.getRed() - 15), 
+                                        Math.max(0, codeBg.getGreen() - 15), 
+                                        Math.max(0, codeBg.getBlue() - 15)
+                                    );
                                 }
+                                header.setBackground(headerBg);
+                                
+                                // Update Labels inside Header ("Code" and "Copy")
+                                for (Component headerComp : header.getComponents()) {
+                                    if (headerComp instanceof javax.swing.JLabel) {
+                                        javax.swing.JLabel label = (javax.swing.JLabel) headerComp;
+                                        String text = label.getText();
+                                        if ("Code".equals(text)) {
+                                            label.setForeground(isDark ? Color.LIGHT_GRAY : Color.DARK_GRAY);
+                                        } else if (text != null && (text.contains("Copy") || text.contains("Copied"))) {
+                                            label.setForeground(isDark ? Color.WHITE : Color.BLACK);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } 
+                    // --- 2. USER BUBBLE REFRESH ---
+                    else if (panel.getClientProperty("isUserBubble") != null && panel instanceof JPanel) {
+                        MessageBubbleFactory.applyTheme((JPanel) panel, currentBg);
+                    }
+                    // --- 3. TABLE BLOCK REFRESH ---
+                    else {
+                         // Search for Grid Panel (it might be inside a JScrollPane)
+                        JPanel gridPanel = null;
+                        if (Boolean.TRUE.equals(panel.getClientProperty("isTableBlock")) && panel instanceof JPanel) {
+                            gridPanel = (JPanel) panel;
+                        } 
+                        else if (panel instanceof JScrollPane) {
+                            Component view = ((JScrollPane) panel).getViewport().getView();
+                            if (view instanceof JPanel) gridPanel = (JPanel) view;
+                        }
 
-                                if (cellPanel.getComponentCount() > 0) {
-                                    Component contentComp = cellPanel.getComponent(0);
-                                    if (contentComp instanceof JTextPane) {
-                                        JTextPane textPane = (JTextPane) contentComp;
+                        if (gridPanel != null) {
+                            Color borderColor = ChatThemeUtils.getTableBorderColor(currentBg);
+                            gridPanel.setBackground(borderColor);
+                            gridPanel.setBorder(javax.swing.BorderFactory.createLineBorder(borderColor, 1));
+                            
+                            Color headerBg = ChatThemeUtils.getTableHeaderColor(currentBg);
+                            Color cellBg   = ChatThemeUtils.getTableCellColor(currentBg);
+                            Color textColor = ChatThemeUtils.getContrastingTextColor(cellBg);
+
+                            for (Component cell : gridPanel.getComponents()) {
+                                if (cell instanceof JPanel) {
+                                    JPanel cellPanel = (JPanel) cell;
+                                    if (Boolean.TRUE.equals(cellPanel.getClientProperty("isTableHeader"))) {
+                                        cellPanel.setBackground(headerBg);
+                                    } else {
+                                        cellPanel.setBackground(cellBg);
+                                    }
+
+                                    if (cellPanel.getComponentCount() > 0 && cellPanel.getComponent(0) instanceof JTextPane) {
+                                        JTextPane textPane = (JTextPane) cellPanel.getComponent(0);
                                         textPane.setForeground(textColor);
                                         
                                         StyledDocument cellDoc = textPane.getStyledDocument();
@@ -458,7 +511,6 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                                             int end = elem.getEndOffset();
                                             
                                             if (elemAttrs.getAttribute("LatexRaw") != null) {
-                                                // REFRESH TABLE ICONS
                                                 String rawMath = (String) elemAttrs.getAttribute("LatexRaw");
                                                 String contentMath = (String) elemAttrs.getAttribute("LatexContent");
                                                 Icon newIcon = MathRenderer.latexToIcon(rawMath, contentMath, textColor);
@@ -478,11 +530,10 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                         }
                     }
                 } 
+                // --- 4. MAIN CHAT LATEX REFRESH ---
                 else if (attrs.getAttribute("LatexRaw") != null) {
-                    // REFRESH MAIN CHAT ICONS
                     String rawMath = (String) attrs.getAttribute("LatexRaw");
                     String contentMath = (String) attrs.getAttribute("LatexContent");
-                    
                     Icon newIcon = MathRenderer.latexToIcon(rawMath, contentMath, currentFg);
                     
                     if (newIcon != null) {
@@ -494,7 +545,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             }
         }
     }
-
+   
     private void append(String text, Style style) {
         try {
             StyledDocument doc = chatPane.getStyledDocument();

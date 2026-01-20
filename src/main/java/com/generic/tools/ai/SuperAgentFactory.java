@@ -87,7 +87,7 @@ public class SuperAgentFactory {
         List<Object> allTools = new ArrayList<>();
         allTools.add(new CalculatorTool()); 
         allTools.add(new ClimateInfoTool());    
-        allTools.add(new StockTool());
+        //allTools.add(new StockTool());
         allTools.add(new WebHeaderTimeTool());
         allTools.add(new RssNewsTool());
         
