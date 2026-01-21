@@ -198,8 +198,10 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         });
     }
 
+   
+    Point savedViewPos = null;
     public void initStyles() {
-        Point savedViewPos = null;
+        
         if (jScrollPane1 != null && jScrollPane1.getViewport() != null) {
             savedViewPos = jScrollPane1.getViewport().getViewPosition();
         }
@@ -249,10 +251,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         StyleConstants.setFontSize(linkStyle, fontSize);
         linkStyle.addAttribute("IsLink", true);
         int anchorIndex = getAnchorIndex();
-        refreshAllComponents();
-        if (savedViewPos != null && jScrollPane1 != null) {
-            jScrollPane1.getViewport().setViewPosition(savedViewPos);
-        }
+        refreshAllComponents();        
 
         // --- 3. SCHEDULE PRECISE SNAP (For font metric changes) ---
         if (anchorIndex >= 0) snapToPosition(anchorIndex);
@@ -384,6 +383,9 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
     
    private void refreshAllComponents() {
+       
+        
+       
         StyledDocument doc = chatPane.getStyledDocument();
         Element root = doc.getDefaultRootElement();
 
@@ -403,11 +405,11 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
                 if (comp instanceof JComponent) {
                     processComponentBlock((JComponent) comp, currentBg, currentFg);
-                } 
-                else if (attrs.getAttribute("LatexRaw") != null) {
-                    processMainChatLatex(doc, leaf, attrs, currentFg);
                 }
             }
+        }
+        if (savedViewPos != null && jScrollPane1 != null) {
+            jScrollPane1.getViewport().setViewPosition(savedViewPos);
         }
     }
 
@@ -461,54 +463,42 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
                 if (cellPanel.getComponentCount() > 0 && cellPanel.getComponent(0) instanceof JTextPane) {
                     JTextPane textPane = (JTextPane) cellPanel.getComponent(0);
-                    textPane.setForeground(textColor);
-                    // Refresh LaTeX inside Table Cells
-                    refreshLatexInDocument(textPane.getStyledDocument(), textColor);
+                    updateTableCellColor(textPane, textColor);                    
                 }
             }
         }
     }
-
-    private void processMainChatLatex(StyledDocument doc, Element leaf, AttributeSet attrs, Color currentFg) {
-        String rawMath = (String) attrs.getAttribute("LatexRaw");
-        String contentMath = (String) attrs.getAttribute("LatexContent");
-        Icon newIcon = MathRenderer.latexToIcon(rawMath, contentMath, currentFg);
+    
+    private void updateTableCellColor(JTextPane textPane, Color newColor) {
+        // 1. Update component property
+        textPane.setForeground(newColor);
         
-        if (newIcon != null) {
-            SimpleAttributeSet newAttrs = new SimpleAttributeSet(attrs);
-            StyleConstants.setIcon(newAttrs, newIcon);
-            doc.setCharacterAttributes(leaf.getStartOffset(), leaf.getEndOffset() - leaf.getStartOffset(), newAttrs, false);
-        }
-    }
-
-    // Reuse logic for both Main Chat and Table Cells
-    private void refreshLatexInDocument(StyledDocument doc, Color textColor) {
+        // 2. Update Attributes directly
+        StyledDocument doc = textPane.getStyledDocument();
+        SimpleAttributeSet colorAttr = new SimpleAttributeSet();
+        StyleConstants.setForeground(colorAttr, newColor);
+        
+        // We iterate through the text to skip Links (which are usually Blue/Underlined)
         int len = doc.getLength();
         int pos = 0;
-        SimpleAttributeSet colorAttr = new SimpleAttributeSet();
-        StyleConstants.setForeground(colorAttr, textColor);
-
+        
         while (pos < len) {
             Element elem = doc.getCharacterElement(pos);
-            AttributeSet elemAttrs = elem.getAttributes();
+            AttributeSet attrs = elem.getAttributes();
             int end = elem.getEndOffset();
             
-            if (elemAttrs.getAttribute("LatexRaw") != null) {
-                String rawMath = (String) elemAttrs.getAttribute("LatexRaw");
-                String contentMath = (String) elemAttrs.getAttribute("LatexContent");
-                Icon newIcon = MathRenderer.latexToIcon(rawMath, contentMath, textColor);
-                if (newIcon != null) {
-                    SimpleAttributeSet newAttrs = new SimpleAttributeSet(elemAttrs);
-                    StyleConstants.setIcon(newAttrs, newIcon);
-                    doc.setCharacterAttributes(pos, end - pos, newAttrs, false);
-                }
-            } else if (!StyleConstants.isUnderline(elemAttrs)) {
+            // Check if it's a link (Links have underline in TableCellRenderer)
+            boolean isLink = StyleConstants.isUnderline(attrs);
+            
+            if (!isLink) {
+                // Apply new color, "false" means merge (don't remove Bold/Italic)
                 doc.setCharacterAttributes(pos, end - pos, colorAttr, false);
             }
+            
             pos = end;
         }
     }
-   
+    
     private void append(String text, Style style) {
         try {
             ChatThemeUtils.smartInsert(chatPane.getStyledDocument(), text, style);
