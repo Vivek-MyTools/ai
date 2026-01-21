@@ -6,6 +6,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
+import java.awt.Font;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
@@ -31,6 +32,7 @@ import javax.swing.text.Element;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
+import javax.swing.text.StyleContext;
 import javax.swing.text.StyledDocument;
 
 /**
@@ -508,12 +510,10 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
    
     private void append(String text, Style style) {
         try {
-            StyledDocument doc = chatPane.getStyledDocument();
-            doc.insertString(doc.getLength(), text, style);
-        } catch (BadLocationException ignored) {
-        }
+            ChatThemeUtils.smartInsert(chatPane.getStyledDocument(), text, style);
+        } catch (BadLocationException ignored) {}
     }
-
+    
     private void insertComponent(Component comp) {
         try {
             StyledDocument doc = chatPane.getStyledDocument();

@@ -3,6 +3,7 @@ package com.generic.tools.ai.launcher;
 import com.generic.tools.lnf.theme.LnfTheme;
 import com.generic.tools.lnf.theme.ThemeChangeListener;
 import com.generic.tools.lnf.theme.ThemeHelper;
+import com.generic.tools.lnf.theme.Themes;
 
 /**
  *
@@ -17,7 +18,7 @@ public class AIAgent extends javax.swing.JFrame implements ThemeChangeListener {
      */
     public AIAgent() {
         initComponents();
-        LnfTheme.getInstance().setThemeName("Solar Dark");
+        LnfTheme.getInstance().setThemeName(Themes.ARC_DARK);
         LnfTheme.getInstance().addComponent(this).apply();   
         LnfTheme.getInstance().register(this);
         ThemeHelper.getInstance().addThemesToMenu(themes, "");

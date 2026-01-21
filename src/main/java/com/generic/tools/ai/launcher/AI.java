@@ -3,6 +3,7 @@ package com.generic.tools.ai.launcher;
 import com.generic.tools.lnf.theme.LnfTheme;
 import com.generic.tools.lnf.theme.ThemeChangeListener;
 import com.generic.tools.lnf.theme.ThemeHelper;
+import com.generic.tools.lnf.theme.Themes;
 import java.awt.Component;
 
 
@@ -13,6 +14,7 @@ public class AI extends javax.swing.JFrame implements ThemeChangeListener{
      */
     public AI() {
         initComponents();
+        LnfTheme.getInstance().setThemeName(Themes.ARC_DARK);
         ThemeHelper.getInstance().addThemesToMenu(theme, null);        
         LnfTheme.getInstance().addComponents(new Component[]{this,chatPanel}).apply();
         LnfTheme.getInstance().register(this);
