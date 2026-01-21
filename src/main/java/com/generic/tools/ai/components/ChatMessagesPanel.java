@@ -341,6 +341,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             // Group 9: Tables
             else if (m.group(9) != null) { 
                 String tableRaw = m.group(9);
+                tableRaw = MathRenderer.fixMathForTable(tableRaw);
                 append("\n", agentMsg);
                 Component tableComp = TableBlockFactory.createTable(tableRaw, chatPane.getBackground());
                 JPanel wrapper = new JPanel(new java.awt.BorderLayout());
