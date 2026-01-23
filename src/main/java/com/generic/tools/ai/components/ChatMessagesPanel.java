@@ -176,9 +176,8 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         return messageHistory;
     }
 
-   public void loadHistory(List<ChatMessageData> history) {        
-        chatPane.setText("");        
-        
+    public void loadHistory(List<ChatMessageData> history) {
+        chatPane.setText("");
         this.messageHistory.clear();
 
         for (ChatMessageData msg : history) {
@@ -189,22 +188,19 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             }
         }
                 
+        // Force scroll to bottom after loading history
         javax.swing.SwingUtilities.invokeLater(() -> {
-             if (jScrollPane1.getVerticalScrollBar() != null) {
-                 jScrollPane1.getVerticalScrollBar().setValue(
-                     jScrollPane1.getVerticalScrollBar().getMaximum()
+             if (scrollPane != null && scrollPane.getVerticalScrollBar() != null) {
+                 scrollPane.getVerticalScrollBar().setValue(
+                      scrollPane.getVerticalScrollBar().getMaximum()
                  );
              }
         });
     }
-
-   
-    Point savedViewPos = null;
+  
     public void initStyles() {
-        
-        if (jScrollPane1 != null && jScrollPane1.getViewport() != null) {
-            savedViewPos = jScrollPane1.getViewport().getViewPosition();
-        }
+        // 1. Capture the anchor BEFORE we change any colors/fonts
+        int anchorIndex = getAnchorIndex();
         
         Color bg = ChatThemeUtils.getCanvasBackground();
         Color fg = ChatThemeUtils.getCanvasForeground();
@@ -216,6 +212,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         String mainFontName = ChatThemeUtils.getUnicodeFontName();        
         int fontSize = 14;
 
+        // ... (Keep your existing Style definitions here: agentName, agentMsg, etc.) ...
         agentName = chatPane.addStyle("AgentName", null);
         StyleConstants.setBold(agentName, true);
         StyleConstants.setFontFamily(agentName, mainFontName);
@@ -250,11 +247,12 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         StyleConstants.setFontFamily(linkStyle, mainFontName);
         StyleConstants.setFontSize(linkStyle, fontSize);
         linkStyle.addAttribute("IsLink", true);
-        int anchorIndex = getAnchorIndex();
+        
+        // 2. Refresh visual components (Tables, Bubbles)
         refreshAllComponents();        
-
-        // --- 3. SCHEDULE PRECISE SNAP (For font metric changes) ---
-        if (anchorIndex >= 0) snapToPosition(anchorIndex);
+      
+        // 3. Schedule the snap logic
+        snapToPosition(anchorIndex);
     }
 
     public void addUserMessage(String msg) {
@@ -384,8 +382,6 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     
    private void refreshAllComponents() {
        
-        
-       
         StyledDocument doc = chatPane.getStyledDocument();
         Element root = doc.getDefaultRootElement();
 
@@ -407,10 +403,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
                     processComponentBlock((JComponent) comp, currentBg, currentFg);
                 }
             }
-        }
-        if (savedViewPos != null && jScrollPane1 != null) {
-            jScrollPane1.getViewport().setViewPosition(savedViewPos);
-        }
+        }        
     }
 
     private void processComponentBlock(JComponent panel, Color currentBg, Color currentFg) {
@@ -529,41 +522,82 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
 
     private int getAnchorIndex() {
-        if (jScrollPane1 != null && jScrollPane1.getViewport() != null) {
-            Point currentPoint = jScrollPane1.getViewport().getViewPosition();
-            return chatPane.viewToModel(currentPoint);
+        if (scrollPane == null || scrollPane.getViewport() == null) {
+            return -1;
         }
-        return 0;
-    }
+        if (messageHistory.isEmpty()) {
+            return 0;
+        }
 
+        javax.swing.JScrollBar vsb = scrollPane.getVerticalScrollBar();
+        if (vsb == null) {
+            return -1;
+        }
+
+        int value = vsb.getValue();
+        int extent = vsb.getVisibleAmount();
+        int max = vsb.getMaximum();
+
+        // SAFETY: If scrollbar claims 0 height, the layout is invalid/reset.
+        // Assume we were at the bottom (Standard Chat Behavior).
+        if (max == 0 || extent == 0) {
+            return -1;
+        }
+
+        // STICK-TO-BOTTOM: If we are near the bottom (100px threshold), stay there.
+        if (value + extent >= max - 100) {
+            return -1;
+        }
+
+        Point p = scrollPane.getViewport().getViewPosition();
+        return chatPane.viewToModel(p);
+    }
+   
+    
     private void snapToPosition(int index) {
-        javax.swing.SwingUtilities.invokeLater(() -> {
-            javax.swing.SwingUtilities.invokeLater(() -> {
-                try {
+        // Run in the next event loop cycle to ensure Styles are applied
+        SwingUtilities.invokeLater(() -> {
+            if (scrollPane == null || scrollPane.getViewport() == null) return;
+
+            // CRITICAL FIX: Force the ScrollPane to layout its components IMMEDIATELY.
+            // This calculates the new text height *before* the screen repaints, 
+            // ensuring we jump to the correct spot without a visual "frame skip".
+            scrollPane.validate(); 
+
+            try {
+                javax.swing.JScrollBar vsb = scrollPane.getVerticalScrollBar();
+                if (vsb == null) return;
+
+                // CASE 1: Stick to Bottom
+                if (index == -1) {
+                     vsb.setValue(vsb.getMaximum());
+                } 
+                // CASE 2: Restore Reading Position
+                else {
                     Rectangle rect = chatPane.modelToView(index);
-                    if (rect == null) {
-                        return;
+                    if (rect != null) {
+                        Dimension viewSize = scrollPane.getViewport().getViewSize();
+                        Dimension extentSize = scrollPane.getViewport().getExtentSize();
+                        int maxScrollY = viewSize.height - extentSize.height;
+                        
+                        // Clamp value and set immediately
+                        int finalY = Math.min(rect.y, Math.max(0, maxScrollY));
+                        scrollPane.getViewport().setViewPosition(new Point(0, finalY));
                     }
-                    Dimension viewSize = jScrollPane1.getViewport().getViewSize();
-                    Dimension extentSize = jScrollPane1.getViewport().getExtentSize();
-                    int maxScrollY = viewSize.height - extentSize.height;
-                    int finalY = Math.min(rect.y, Math.max(0, maxScrollY));
-                    jScrollPane1.getViewport().setViewPosition(new Point(0, finalY));
-                } catch (BadLocationException ignored) {
                 }
-            });
+            } catch (Exception ignored) { }
         });
     }
-
+   
     @SuppressWarnings("unchecked")
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents
     private void initComponents() {
 
-        jScrollPane1 = new javax.swing.JScrollPane();
+        scrollPane = new javax.swing.JScrollPane();
         chatPane = new javax.swing.JTextPane(){
             @Override
             public boolean getScrollableTracksViewportWidth() {
-                return true; 
+                return true; // Force Text Wrap
             }
         };
 
@@ -571,18 +605,17 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         javax.swing.text.DefaultCaret caret = (javax.swing.text.DefaultCaret) chatPane.getCaret();
         caret.setUpdatePolicy(javax.swing.text.DefaultCaret.NEVER_UPDATE);
-        chatPane.setFont(new java.awt.Font("Dialog", 0, 14)); 
-        chatPane.setText("");
-        jScrollPane1.setViewportView(chatPane);
+        chatPane.setFont(new java.awt.Font("Dialog", 0, 14)); // NOI18N
+        scrollPane.setViewportView(chatPane);
         chatPane.setEditable(false);
 
-        jScrollPane1.setHorizontalScrollBarPolicy(javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
+        scrollPane.setHorizontalScrollBarPolicy(javax.swing.ScrollPaneConstants.HORIZONTAL_SCROLLBAR_NEVER);
 
-        add(jScrollPane1, java.awt.BorderLayout.CENTER);
+        add(scrollPane, java.awt.BorderLayout.CENTER);
     }// </editor-fold>//GEN-END:initComponents
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JTextPane chatPane;
-    private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JScrollPane scrollPane;
     // End of variables declaration//GEN-END:variables
 }

@@ -502,26 +502,33 @@ public class ChatPanel extends javax.swing.JPanel {
     }   
     
     public void themeUpdate() {
-        // 1. Update the main panel immediately (fast operation)
-        if (messagesPanel != null) {
-            messagesPanel.initStyles();
+        // 1. Identify the active window
+        final ChatMessageWindow activeWindow = currentMessageWindow;
+
+        // 2. Update the active panel immediately (Priority)
+        if (activeWindow != null && activeWindow.getChatMessagesPanel() != null) {
+            activeWindow.getChatMessagesPanel().initStyles();
         }
 
-        // 2. Create a SwingWorker to handle the loop in the background
+        // 3. Update background tabs via SwingWorker
         SwingWorker<Void, ChatMessageWindow> worker = new SwingWorker<Void, ChatMessageWindow>() {
 
             @Override
             protected Void doInBackground() throws Exception {
-               
+                // Iterate over all panels
                 for (ChatMessageWindow window : chatPanels.values()) {                    
-                    publish(window);                    
+                    if (window == activeWindow) {
+                        continue;
+                    }
+                    
+                    publish(window);
                     Thread.sleep(5); 
                 }
                 return null;
             }
 
             @Override
-            protected void process(List<ChatMessageWindow> chunks) {                
+            protected void process(List<ChatMessageWindow> chunks) {
                 for (ChatMessageWindow window : chunks) {
                     if (window.getChatMessagesPanel() != null) {
                         window.getChatMessagesPanel().initStyles();
@@ -530,7 +537,7 @@ public class ChatPanel extends javax.swing.JPanel {
             }
         };
 
-        // 3. Start the background task
+        // 4. Start the background task
         worker.execute();
     }
     
