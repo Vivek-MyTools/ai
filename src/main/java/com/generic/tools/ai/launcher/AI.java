@@ -18,6 +18,7 @@ public class AI extends javax.swing.JFrame implements ThemeChangeListener{
         ThemeHelper.getInstance().addThemesToMenu(theme, null);        
         LnfTheme.getInstance().addComponents(new Component[]{this,chatPanel}).apply();
         LnfTheme.getInstance().register(this);
+        System.out.println("[Debug]: AI ");
         
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             System.out.println("🛑 App shutting down. Saving chats...");
@@ -95,7 +96,7 @@ public class AI extends javax.swing.JFrame implements ThemeChangeListener{
     // End of variables declaration//GEN-END:variables
 
     @Override
-    public void onLookAndFeelChanged() {
+    public void onThemeChanged() {
         chatPanel.themeUpdate();        
     }
 }

@@ -12,6 +12,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import javax.swing.SwingUtilities;
+import javax.swing.SwingWorker;
 
 
 public class ChatPanel extends javax.swing.JPanel {
@@ -501,9 +502,36 @@ public class ChatPanel extends javax.swing.JPanel {
     }   
     
     public void themeUpdate() {
-        for (ChatMessageWindow window : chatPanels.values()) {
-            window.getChatMessagesPanel().initStyles();
-        }        
+        // 1. Update the main panel immediately (fast operation)
+        if (messagesPanel != null) {
+            messagesPanel.initStyles();
+        }
+
+        // 2. Create a SwingWorker to handle the loop in the background
+        SwingWorker<Void, ChatMessageWindow> worker = new SwingWorker<Void, ChatMessageWindow>() {
+
+            @Override
+            protected Void doInBackground() throws Exception {
+               
+                for (ChatMessageWindow window : chatPanels.values()) {                    
+                    publish(window);                    
+                    Thread.sleep(5); 
+                }
+                return null;
+            }
+
+            @Override
+            protected void process(List<ChatMessageWindow> chunks) {                
+                for (ChatMessageWindow window : chunks) {
+                    if (window.getChatMessagesPanel() != null) {
+                        window.getChatMessagesPanel().initStyles();
+                    }
+                }
+            }
+        };
+
+        // 3. Start the background task
+        worker.execute();
     }
     
     /**

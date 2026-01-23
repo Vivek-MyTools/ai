@@ -26,7 +26,7 @@ public class AIAgent extends javax.swing.JFrame implements ThemeChangeListener {
 
     
     @Override
-    public void onLookAndFeelChanged() {
+    public void onThemeChanged() {
          ai.onUpdate();
     }
     

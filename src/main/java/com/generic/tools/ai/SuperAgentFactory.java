@@ -90,7 +90,23 @@ public class SuperAgentFactory {
         
         // Smart Memory Budget: Local models get more context, cloud gets less (to save money)
         boolean isLocal = OllamaHelper.isOllamaModel(modelName) || OllamaHelper.isOllamaAvailable();
-        int memoryBudget = isLocal ? 4000 : 2000;
+        
+        int memoryBudget = 2000;          // non-Ollama (cloud) default
+        if (isLocal) {
+            // 3️⃣ Ollama models – map name → context window
+            switch (modelName.toLowerCase()) {
+                case "gpt-oss:20b-cloud":
+                    memoryBudget = 8192;   // 8 192 tokens
+                    break;
+                case "qwen3-coder:480b-cloud":
+                    memoryBudget = 32768;  // 32 768 tokens
+                    break;
+                // Add more Ollama models here as needed
+                default:
+                    memoryBudget = 4000;   // generic Ollama fallback
+                    break;
+            }
+        }
 
         return AiServices.builder(Assistant.class)
                 .chatLanguageModel(model)
@@ -164,6 +180,7 @@ public class SuperAgentFactory {
     }
 
     private ChatLanguageModel createOpenAiModel(String targetUrl) {
+        LOG.info("Getting OPENAI_API_KEY");
         String effectiveKey = (this.apiKey != null) ? this.apiKey : System.getenv("OPENAI_API_KEY");
         if (effectiveKey == null) {
             throw new RuntimeException("Missing API Key for Cloud Model: " + targetUrl);
