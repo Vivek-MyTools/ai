@@ -552,12 +552,14 @@ public class ChatPanel extends javax.swing.JPanel {
 
         splitPane = new javax.swing.JSplitPane();
         rightPanel = new javax.swing.JPanel();
-        newChatBtn = new javax.swing.JButton();
         list = new com.generic.tools.components.list.UIList();
         leftPanel = new javax.swing.JPanel();
         inputPanel = new com.generic.tools.ai.components.ChatInputPanel();
         topPanel = new javax.swing.JPanel();
+        topLeft = new javax.swing.JPanel();
         modelList = new javax.swing.JComboBox<>();
+        topRight = new javax.swing.JPanel();
+        newChatBtn = new javax.swing.JButton();
 
         setLayout(new java.awt.BorderLayout());
 
@@ -566,14 +568,6 @@ public class ChatPanel extends javax.swing.JPanel {
         splitPane.setOneTouchExpandable(true);
 
         rightPanel.setLayout(new javax.swing.BoxLayout(rightPanel, javax.swing.BoxLayout.PAGE_AXIS));
-
-        newChatBtn.setText("New Chat");
-        newChatBtn.addActionListener(new java.awt.event.ActionListener() {
-            public void actionPerformed(java.awt.event.ActionEvent evt) {
-                newChatBtnActionPerformed(evt);
-            }
-        });
-        rightPanel.add(newChatBtn);
         rightPanel.add(list);
 
         splitPane.setRightComponent(rightPanel);
@@ -581,7 +575,9 @@ public class ChatPanel extends javax.swing.JPanel {
         leftPanel.setLayout(new java.awt.BorderLayout());
         leftPanel.add(inputPanel, java.awt.BorderLayout.PAGE_END);
 
-        topPanel.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
+        topPanel.setLayout(new java.awt.GridLayout(1, 0, 2, 0));
+
+        topLeft.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
 
         modelList.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "gpt-oss:20b-cloud", "qwen3-coder:480b-cloud", "llama3.2", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gpt-4o", "gpt-3.5-turbo" }));
         modelList.addActionListener(new java.awt.event.ActionListener() {
@@ -589,7 +585,23 @@ public class ChatPanel extends javax.swing.JPanel {
                 modelListActionPerformed(evt);
             }
         });
-        topPanel.add(modelList);
+        topLeft.add(modelList);
+
+        topPanel.add(topLeft);
+
+        topRight.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
+
+        newChatBtn.setIcon(new javax.swing.ImageIcon(getClass().getResource("/chat/icons8-chat-20.png"))); // NOI18N
+        newChatBtn.setText("New Chat");
+        newChatBtn.setPreferredSize(new java.awt.Dimension(114, 25));
+        newChatBtn.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                newChatBtnActionPerformed(evt);
+            }
+        });
+        topRight.add(newChatBtn);
+
+        topPanel.add(topRight);
 
         leftPanel.add(topPanel, java.awt.BorderLayout.PAGE_START);
 
@@ -617,6 +629,8 @@ public class ChatPanel extends javax.swing.JPanel {
     private javax.swing.JButton newChatBtn;
     private javax.swing.JPanel rightPanel;
     private javax.swing.JSplitPane splitPane;
+    private javax.swing.JPanel topLeft;
     private javax.swing.JPanel topPanel;
+    private javax.swing.JPanel topRight;
     // End of variables declaration//GEN-END:variables
 }
