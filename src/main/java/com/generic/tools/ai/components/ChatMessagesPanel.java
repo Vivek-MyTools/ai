@@ -79,6 +79,25 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         LnfTheme.getInstance().addComponent(this);
     }
     
+    @Override
+    public void updateUI() {
+        int preservedAnchor = -1;
+        try {
+            if (scrollPane != null) {
+                preservedAnchor = getAnchorIndex();
+            }
+        } catch (Exception e) { } 
+
+        super.updateUI();
+        
+        // 2. Schedule the style restore, passing the PRESERVED anchor.
+        final int anchorToRestore = preservedAnchor;
+        if (chatPane != null) {
+            SwingUtilities.invokeLater(() -> initStyles(anchorToRestore));
+        }
+    }
+        
+    
     private void setupExportMenu() {
         JPopupMenu popup = new JPopupMenu();
         JMenuItem exportItem = new JMenuItem("Export Chat to PDF");
@@ -197,10 +216,12 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
              }
         });
     }
-  
+    
     public void initStyles() {
-        // 1. Capture the anchor BEFORE we change any colors/fonts
-        int anchorIndex = getAnchorIndex();
+        initStyles(getAnchorIndex());
+    }
+  
+    public void initStyles(int anchorIndex) {              
         
         Color bg = ChatThemeUtils.getCanvasBackground();
         Color fg = ChatThemeUtils.getCanvasForeground();
@@ -443,6 +464,16 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         Color borderColor = ChatThemeUtils.getTableBorderColor(currentBg);
         gridPanel.setBackground(borderColor);
         gridPanel.setBorder(javax.swing.BorderFactory.createLineBorder(borderColor, 1));
+        
+        if (gridPanel.getParent() instanceof javax.swing.JViewport) {
+            javax.swing.JViewport viewport = (javax.swing.JViewport) gridPanel.getParent();
+            viewport.setOpaque(false);
+            if (viewport.getParent() instanceof javax.swing.JScrollPane) {
+                javax.swing.JScrollPane scroll = (javax.swing.JScrollPane) viewport.getParent();
+                scroll.setOpaque(false);
+                scroll.setBorder(null); // Remove native border
+            }
+        }
         
         Color headerBg = ChatThemeUtils.getTableHeaderColor(currentBg);
         Color cellBg   = ChatThemeUtils.getTableCellColor(currentBg);

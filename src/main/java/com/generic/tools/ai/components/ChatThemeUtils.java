@@ -137,11 +137,15 @@ public class ChatThemeUtils {
     // --- Standard Theme Helpers ---
     public static Color getCanvasBackground() {
         Color c = UIManager.getColor("TextArea.background");
-        return (c != null) ? c : Color.WHITE; 
+        if (c == null) c = UIManager.getColor("TextField.background");
+        if (c == null) c = UIManager.getColor("window");
+        return (c != null) ? c : Color.WHITE;
     }
 
     public static Color getCanvasForeground() {
         Color c = UIManager.getColor("TextArea.foreground");
+        if (c == null) c = UIManager.getColor("TextField.foreground");
+        if (c == null) c = UIManager.getColor("textText");
         return (c != null) ? c : Color.BLACK;
     }
     
