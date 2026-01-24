@@ -194,27 +194,26 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     public List<ChatMessageData> getMessageHistory() {
         return messageHistory;
     }
-
+    private boolean isLoading = false;
     public void loadHistory(List<ChatMessageData> history) {
-        chatPane.setText("");
-        this.messageHistory.clear();
+        isLoading = true; 
+        try {
+            chatPane.setText("");
+            this.messageHistory.clear();
 
-        for (ChatMessageData msg : history) {
-            if ("USER".equals(msg.role)) {
-                addUserMessage(msg.content);
-            } else {
-                addAgentMessage(msg.content);
+            for (ChatMessageData msg : history) {
+                if ("USER".equals(msg.role)) {
+                    addUserMessage(msg.content);
+                } else {
+                    addAgentMessage(msg.content);
+                }
             }
+        } finally {
+            isLoading = false;
         }
-                
-        // Force scroll to bottom after loading history
-        javax.swing.SwingUtilities.invokeLater(() -> {
-             if (scrollPane != null && scrollPane.getVerticalScrollBar() != null) {
-                 scrollPane.getVerticalScrollBar().setValue(
-                      scrollPane.getVerticalScrollBar().getMaximum()
-                 );
-             }
-        });
+        
+        // After loading history, we still likely want to see the very end of the chat
+        snapToPosition(-1);
     }
     
     public void initStyles() {
@@ -278,6 +277,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
     public void addUserMessage(String msg) {
         messageHistory.add(new ChatMessageData("USER", msg));
+       
         this.lastConversationIndex = chatPane.getDocument().getLength();
         JPanel userBubble = MessageBubbleFactory.createBubble(
                 msg,
@@ -288,7 +288,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         append("\n", userMsg);
         insertComponent(userBubble);
         append("\n", userMsg);
-        snapToPosition(lastConversationIndex);
+        if (!isLoading) snapToPosition(lastConversationIndex);
     }
 
     public void addAgentMessage(String msg) {
@@ -296,7 +296,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         append("\nAgent: ", agentName);
         parseAndAppend(msg);
         append("\n\n", agentMsg);
-        snapToPosition(lastConversationIndex);
+        if (!isLoading) snapToPosition(lastConversationIndex);
     }
 
     // ===== Internal Logic =====
