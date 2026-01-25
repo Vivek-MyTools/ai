@@ -7,11 +7,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.logging.Logger;
 
 import com.generic.tools.ai.agent.Assistant;
+import com.generic.tools.ai.helper.ChatMessageData; // Import your Data Object
 import com.generic.tools.ai.helper.OllamaHelper;
 import com.generic.tools.ai.tools.*;
 
 import dev.langchain4j.data.document.splitter.DocumentSplitters;
+import dev.langchain4j.data.message.AiMessage;   // Import for loading history
+import dev.langchain4j.data.message.UserMessage; // Import for loading history
 import dev.langchain4j.data.segment.TextSegment;
+import dev.langchain4j.memory.ChatMemory;        // Import generic ChatMemory interface
 import dev.langchain4j.memory.chat.TokenWindowChatMemory;
 import dev.langchain4j.model.chat.ChatLanguageModel;
 import dev.langchain4j.model.embedding.onnx.allminilml6v2.AllMiniLmL6V2EmbeddingModel;
@@ -29,7 +33,7 @@ public class SuperAgentFactory {
 
     private static final Logger LOG = Logger.getLogger(SuperAgentFactory.class.getName());
     
-    private final String customBaseUrl; // Renamed for clarity (User provided)
+    private final String customBaseUrl;
     private final String modelName;
     private final String apiKey; 
     
@@ -48,33 +52,38 @@ public class SuperAgentFactory {
 
     // --- CONSTRUCTORS ---
 
-    // 1. Minimal: Just the model name (e.g., "llama3" or "gpt-4")
     public SuperAgentFactory(String modelName) {
         this(null, modelName, null);
     }
 
-    // 2. Standard: Base URL + Model (Legacy support)
     public SuperAgentFactory(String baseUrl, String modelName) {
         this(baseUrl, modelName, null);
     }
     
-    // 3. Full: Base URL + Model + Key
     public SuperAgentFactory(String baseUrl, String modelName, String apiKey) {
         this.customBaseUrl = baseUrl;
         this.modelName = modelName;
         this.apiKey = apiKey;
     }
     
+    // 1. Basic creation
     public Assistant createSuperAgent() {
-        return createSuperAgent(null, null);
+        return createSuperAgent(null, DEFAULT_SYSTEM_PROMPT, null, null);
     }
 
+    // 2. Creation with Docs and Tools (No History)
     public Assistant createSuperAgent(String docFolderPath, Object... extraTools) {
-        return createSuperAgent(docFolderPath, DEFAULT_SYSTEM_PROMPT, extraTools);
+        return createSuperAgent(docFolderPath, DEFAULT_SYSTEM_PROMPT, extraTools, null);
     }
 
+    // 3. Creation with Docs, System Prompt, and Tools (No History)
     public Assistant createSuperAgent(String docFolderPath, String systemInstruction, Object... extraTools) {
-        LOG.info("--- 🦸 Initializing Super Agent (" + this.modelName + ") ---");
+        return createSuperAgent(docFolderPath, systemInstruction, extraTools, null);
+    }
+
+    // 4. MAIN CREATION METHOD (Now accepts History)
+    public Assistant createSuperAgent(String docFolderPath, String systemInstruction, Object[] extraTools, List<ChatMessageData> history) {
+        LOG.info("--- 🦸 Initializing Super Agent (" + this.modelName + ") with History ---");
  
         ChatLanguageModel model = createLanguageModel();
         ContentRetriever retriever = setupRAG(docFolderPath);
@@ -88,31 +97,39 @@ public class SuperAgentFactory {
         
         if (extraTools != null) Collections.addAll(allTools, extraTools); 
         
-        // Smart Memory Budget: Local models get more context, cloud gets less (to save money)
+        // --- MEMORY SETUP ---
         boolean isLocal = OllamaHelper.isOllamaModel(modelName) || OllamaHelper.isOllamaAvailable();
+        int memoryBudget = 2000;
         
-        int memoryBudget = 2000;          // non-Ollama (cloud) default
         if (isLocal) {
-            // 3️⃣ Ollama models – map name → context window
             switch (modelName.toLowerCase()) {
-                case "gpt-oss:20b-cloud":
-                    memoryBudget = 8192;   // 8 192 tokens
-                    break;
-                case "qwen3-coder:480b-cloud":
-                    memoryBudget = 32768;  // 32 768 tokens
-                    break;
-                // Add more Ollama models here as needed
-                default:
-                    memoryBudget = 4000;   // generic Ollama fallback
-                    break;
+                case "gpt-oss:20b-cloud": memoryBudget = 8192; break;
+                case "qwen3-coder:480b-cloud": memoryBudget = 32768; break;
+                default: memoryBudget = 4000; break;
             }
         }
 
+        // 1. Create the Memory Object Manually
+        ChatMemory chatMemory = TokenWindowChatMemory.builder()
+                .maxTokens(memoryBudget, new OpenAiTokenizer("gpt-3.5-turbo")) 
+                .build();
+
+        // 2. Populate Memory from History (Context Restoration) 
+        if (history != null && !history.isEmpty()) {
+            LOG.info("Loading " + history.size() + " messages into agent memory...");
+            for (ChatMessageData msg : history) {
+                if ("USER".equals(msg.role)) {
+                    chatMemory.add(UserMessage.from(msg.content));
+                } else if ("AGENT".equals(msg.role)) {
+                    chatMemory.add(AiMessage.from(msg.content));
+                }
+            }
+        }
+
+        // 3. Build Service using the pre-filled memory
         return AiServices.builder(Assistant.class)
                 .chatLanguageModel(model)
-                .chatMemory(TokenWindowChatMemory.builder()
-                        .maxTokens(memoryBudget, new OpenAiTokenizer("gpt-3.5-turbo")) 
-                        .build())                
+                .chatMemory(chatMemory) // Pass the specific instance we populated
                 .tools(allTools.toArray()) 
                 .contentRetriever(retriever)
                 .systemMessageProvider(chatMemoryId -> systemInstruction) 
@@ -126,17 +143,14 @@ public class SuperAgentFactory {
             
             String normalizedName = modelName.toLowerCase();
 
-            // 1. Google Gemini (Distinct API)
             if (normalizedName.startsWith("gemini")) {
                 return createGeminiModel();
             }
 
-            // 2. CHECK OLLAMA FIRST (The Fix)
-            // We check this BEFORE OpenAI to catch names like "gpt-oss" or "gpt-local"
             boolean looksLikeOllama = normalizedName.contains("oss") 
                                    || normalizedName.contains("local")
                                    || normalizedName.contains("llama")
-                                   || OllamaHelper.isOllamaModel(modelName); // Checks installed models & known families
+                                   || OllamaHelper.isOllamaModel(modelName);
 
             if (OllamaHelper.isOllamaAvailable() && looksLikeOllama) {
                 String ollamaUrl = OllamaHelper.getOllamaBaseUrl(); 
@@ -152,25 +166,17 @@ public class SuperAgentFactory {
                         .build();
             }
 
-            // 3. Explicit OpenAI (Standard Cloud)
-            // Only catches "gpt" if it wasn't caught by the Ollama check above.
             if (normalizedName.startsWith("gpt") || normalizedName.startsWith("o1")) {
                 return createOpenAiModel(resolveOpenAiBaseUrl());
             }
 
-            // 4. Fallback (Universal)
-            // If we are here, it's a model we don't recognize (e.g. "deepseek-coder").
-            // We assume it's an OpenAI-compatible endpoint (Groq, OpenRouter, etc)
-            // unless Ollama is explicitly strictly configured (omitted for flexibility).
             LOG.warning("⚠️ Unrecognized model prefix. Defaulting to OpenAI-compatible Client for: " + this.modelName);
             return createOpenAiModel(resolveOpenAiBaseUrl());
         });
     }
-    // --- HELPER: Resolve OpenAI URL ---
-    // Returns the custom URL if the user gave one, otherwise the official OpenAI URL.
+
     private String resolveOpenAiBaseUrl() {
         if (this.customBaseUrl != null && !this.customBaseUrl.isBlank()) {
-            // Safety check: Don't accidentally send Cloud keys to Localhost
             if (!this.customBaseUrl.contains("localhost")) {
                 LOG.info("👉 Using Custom Base URL: " + this.customBaseUrl);
                 return this.customBaseUrl;
@@ -208,7 +214,6 @@ public class SuperAgentFactory {
                 .build();
     }
 
-    // --- RAG SETUP (Unchanged from your previous solid version) ---
     private ContentRetriever setupRAG(String folderPath) {
         AllMiniLmL6V2EmbeddingModel embeddingModel = new AllMiniLmL6V2EmbeddingModel();
         InMemoryEmbeddingStore<TextSegment> embeddingStore = new InMemoryEmbeddingStore<>();
@@ -217,15 +222,13 @@ public class SuperAgentFactory {
             Path docDir = Paths.get(folderPath);
             if (Files.exists(docDir)) {
                 try {
-                    // Logic to load documents... (Abbreviated for brevity as this logic was fine)
                     EmbeddingStoreIngestor ingestor = EmbeddingStoreIngestor.builder()
                             .embeddingStore(embeddingStore)
                             .embeddingModel(embeddingModel)
                             .documentSplitter(DocumentSplitters.recursive(300, 20))
                             .build();
                     
-                    // Note: In real code, re-insert your file scanning logic here
-                    // ingestor.ingest(loadedDocuments); 
+                    // Ingest documents here if needed
                 } catch (Exception e) {
                     LOG.severe("RAG Init Failed: " + e.getMessage());
                 }

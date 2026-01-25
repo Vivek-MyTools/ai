@@ -3,6 +3,7 @@ package com.generic.tools.ai.components;
 import com.generic.tools.ai.TitleGenerator;
 import com.generic.tools.ai.helper.ChatHistoryManager;
 import com.generic.tools.ai.helper.ChatSession;
+import java.awt.event.KeyListener;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import javax.swing.DefaultListModel;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 
@@ -38,6 +40,10 @@ public class ChatPanel extends javax.swing.JPanel {
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private String currentQuery;
 
+    private DefaultListModel<String> model;
+    
+    private boolean isProgrammaticUpdate = false;
+    
     // --- Constructors ---
     public ChatPanel() {
         this(new ArrayList<>(), "");
@@ -113,6 +119,8 @@ public class ChatPanel extends javax.swing.JPanel {
                 // 2. Restore the Bubbles (Visuals)
                 window.getChatMessagesPanel().loadHistory(session.messages);
 
+                window.newAgent();
+                
                 // 3. REGISTER CARD (The new step)
                 registerWindowCard(session.name, window);
 
@@ -166,14 +174,16 @@ public class ChatPanel extends javax.swing.JPanel {
         }
 
         currentMessageWindow = newWindow;
-
-        // Update global reference (for other methods that might use it)
         messagesPanel = currentMessageWindow.getChatMessagesPanel();
 
-        // --- SWITCH CARD ---
-        // This string 'key' MUST match what was used in cardsPanel.add()
+        // Switch Card
         cardLayout.show(cardsPanel, key);
-        // -------------------
+        
+        // FIX: Sync the Dropdown to match this chat's model
+        // We use a flag to prevent triggering the ActionListener
+        isProgrammaticUpdate = true;
+        modelList.setSelectedItem(newWindow.getModel());
+        isProgrammaticUpdate = false;
 
         restoreInputState();
     }
@@ -194,10 +204,14 @@ public class ChatPanel extends javax.swing.JPanel {
     // --- Event Handlers ---
 
     private void initListeners() {
+        for (KeyListener l : list.getList().getKeyListeners()) {
+            list.getList().removeKeyListener(l);
+        }
+               
         list.getList().addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting()) {
-                String selectedKey = list.getList().getSelectedValue();
-
+                String selectedKey = list.getList().getSelectedValue();               
+               
                 // Check if valid and different from what we are currently looking at
                 if (selectedKey != null) {
                     // Find the window associated with this key
@@ -206,6 +220,45 @@ public class ChatPanel extends javax.swing.JPanel {
                     // If it's a different window than the active one, switch.
                     if (targetWindow != null && targetWindow != currentMessageWindow) {
                         updateChatMessageWindow(selectedKey);
+                    }
+                }
+            }
+        });     
+    }
+    
+    private void initListPopupMenu() {
+        javax.swing.JPopupMenu popup = new javax.swing.JPopupMenu();
+        javax.swing.JMenuItem deleteItem = new javax.swing.JMenuItem("Delete Chat");
+
+        // Action: What happens when you click "Delete"
+        deleteItem.addActionListener(e -> {
+            String selected = list.getList().getSelectedValue();
+            if (selected != null) {
+                deleteChat(selected);
+            }
+        });
+
+        popup.add(deleteItem);
+
+        // Mouse Listener: Detect Right-Click on the List
+        list.getList().addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                showPopup(e);
+            }
+
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                showPopup(e);
+            }
+
+            private void showPopup(java.awt.event.MouseEvent e) {
+                if (e.isPopupTrigger()) {
+                    // Optional: Select the item under the mouse automatically
+                    int index = list.getList().locationToIndex(e.getPoint());
+                    if (index != -1 && list.getList().getCellBounds(index, index).contains(e.getPoint())) {
+                        list.getList().setSelectedIndex(index);
+                        popup.show(e.getComponent(), e.getX(), e.getY());
                     }
                 }
             }
@@ -397,48 +450,10 @@ public class ChatPanel extends javax.swing.JPanel {
         ChatHistoryManager.saveChats(sessionsToSave);
     }
     
-    private void initListPopupMenu() {
-        javax.swing.JPopupMenu popup = new javax.swing.JPopupMenu();
-        javax.swing.JMenuItem deleteItem = new javax.swing.JMenuItem("Delete Chat");
-
-        // Action: What happens when you click "Delete"
-        deleteItem.addActionListener(e -> {
-            String selected = list.getList().getSelectedValue();
-            if (selected != null) {
-                deleteChat(selected);
-            }
-        });
-
-        popup.add(deleteItem);
-
-        // Mouse Listener: Detect Right-Click on the List
-        list.getList().addMouseListener(new java.awt.event.MouseAdapter() {
-            @Override
-            public void mousePressed(java.awt.event.MouseEvent e) {
-                showPopup(e);
-            }
-
-            @Override
-            public void mouseReleased(java.awt.event.MouseEvent e) {
-                showPopup(e);
-            }
-
-            private void showPopup(java.awt.event.MouseEvent e) {
-                if (e.isPopupTrigger()) {
-                    // Optional: Select the item under the mouse automatically
-                    int index = list.getList().locationToIndex(e.getPoint());
-                    if (index != -1 && list.getList().getCellBounds(index, index).contains(e.getPoint())) {
-                        list.getList().setSelectedIndex(index);
-                        popup.show(e.getComponent(), e.getX(), e.getY());
-                    }
-                }
-            }
-        });
-    }
-    
     private void deleteChat(String chatName) {
         // 1. Get the Window object before we remove it
         ChatMessageWindow windowToRemove = chatPanels.get(chatName);
+        System.out.println("windowToRemove: " + windowToRemove);
         if (windowToRemove == null) {
             return;
         }
@@ -616,7 +631,7 @@ public class ChatPanel extends javax.swing.JPanel {
 
     private void modelListActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_modelListActionPerformed
        currentMessageWindow.setModel((String) modelList.getSelectedItem());
-       currentMessageWindow.newAgent(); 
+       currentMessageWindow.getChatAgent();        
     }//GEN-LAST:event_modelListActionPerformed
 
       

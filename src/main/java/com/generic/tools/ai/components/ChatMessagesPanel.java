@@ -6,7 +6,7 @@ import java.awt.Color;
 import java.awt.Component;
 import java.awt.Cursor;
 import java.awt.Dimension;
-import java.awt.Font;
+import java.awt.Insets;
 import java.awt.Point;
 import java.awt.Rectangle;
 import java.awt.event.MouseAdapter;
@@ -32,7 +32,6 @@ import javax.swing.text.Element;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.Style;
 import javax.swing.text.StyleConstants;
-import javax.swing.text.StyleContext;
 import javax.swing.text.StyledDocument;
 
 /**
@@ -65,6 +64,11 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     private Style agentMsgBold, agentMsgItalic; 
     private Style linkStyle;
     
+    // Stores the exact index at the top of the viewport
+    private int preservedAnchorIndex = -1; 
+    // Stores how many pixels of that line are currently hidden (scrolled up)
+    private int preservedIntraLineOffset = 0;
+    
     private List<ChatMessageData> messageHistory = new ArrayList<>();
 
     public ChatMessagesPanel() {
@@ -72,7 +76,7 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         loadIcons();
         chatPane.setBackground(ChatThemeUtils.getCanvasBackground());
         chatPane.setForeground(ChatThemeUtils.getCanvasForeground());
-
+        chatPane.setMargin(new Insets(5, 5, 5, 5)); 
         setupLinkListener();
         initStyles();
         setupExportMenu();
@@ -82,21 +86,20 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     @Override
     public void updateUI() {
         int preservedAnchor = -1;
-        try {
-            if (scrollPane != null) {
+        
+        // 1. CAPTURE ANCHOR BEFORE UI RESET
+        if (scrollPane != null && chatPane != null) {
+            try {
                 preservedAnchor = getAnchorIndex();
-            }
-        } catch (Exception e) { } 
+            } catch (Exception e) {}
+        }
 
         super.updateUI();
         
-        // 2. Schedule the style restore, passing the PRESERVED anchor.
+        // 2. RESTORE ANCHOR AFTER UI RESET
         final int anchorToRestore = preservedAnchor;
-        if (chatPane != null) {
-            SwingUtilities.invokeLater(() -> initStyles(anchorToRestore));
-        }
+        SwingUtilities.invokeLater(() -> initStyles(anchorToRestore));
     }
-        
     
     private void setupExportMenu() {
         JPopupMenu popup = new JPopupMenu();
@@ -569,18 +572,17 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         int extent = vsb.getVisibleAmount();
         int max = vsb.getMaximum();
 
-        // SAFETY: If scrollbar claims 0 height, the layout is invalid/reset.
-        // Assume we were at the bottom (Standard Chat Behavior).
         if (max == 0 || extent == 0) {
             return -1;
         }
 
-        // STICK-TO-BOTTOM: If we are near the bottom (100px threshold), stay there.
         if (value + extent >= max - 100) {
             return -1;
         }
 
         Point p = scrollPane.getViewport().getViewPosition();
+                      
+        
         return chatPane.viewToModel(p);
     }
    
