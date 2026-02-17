@@ -3,6 +3,7 @@ package com.generic.tools.ai.components;
 import com.generic.tools.ai.TitleGenerator;
 import com.generic.tools.ai.helper.ChatHistoryManager;
 import com.generic.tools.ai.helper.ChatSession;
+import java.io.File;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -11,6 +12,7 @@ import java.util.Map;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import javax.swing.JFileChooser;
 import javax.swing.SwingUtilities;
 import javax.swing.SwingWorker;
 
@@ -37,6 +39,7 @@ public class ChatPanel extends javax.swing.JPanel {
     private volatile Object activeRequestToken;
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
     private String currentQuery;
+    private String knowledgeBase;
 
     // --- Constructors ---
     public ChatPanel() {
@@ -155,7 +158,7 @@ public class ChatPanel extends javax.swing.JPanel {
     
     private ChatMessageWindow createChatWindow(String modelName) {
         ChatMessagesPanel newMsgPanel = new ChatMessagesPanel();
-        return new ChatMessageWindow(modelName, "", newMsgPanel, additionalTools, extraRules);
+        return new ChatMessageWindow(modelName, knowledgeBase, newMsgPanel, additionalTools, extraRules);
     }
 
     private void updateChatMessageWindow(String key) {
@@ -558,6 +561,8 @@ public class ChatPanel extends javax.swing.JPanel {
         topPanel = new javax.swing.JPanel();
         topLeft = new javax.swing.JPanel();
         modelList = new javax.swing.JComboBox<>();
+        knowledgeBaseBtn = new javax.swing.JButton();
+        path = new javax.swing.JLabel();
         topRight = new javax.swing.JPanel();
         newChatBtn = new javax.swing.JButton();
 
@@ -575,7 +580,7 @@ public class ChatPanel extends javax.swing.JPanel {
         leftPanel.setLayout(new java.awt.BorderLayout());
         leftPanel.add(inputPanel, java.awt.BorderLayout.PAGE_END);
 
-        topPanel.setLayout(new java.awt.GridLayout(1, 0, 2, 0));
+        topPanel.setLayout(new javax.swing.BoxLayout(topPanel, javax.swing.BoxLayout.LINE_AXIS));
 
         topLeft.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
 
@@ -586,6 +591,17 @@ public class ChatPanel extends javax.swing.JPanel {
             }
         });
         topLeft.add(modelList);
+
+        knowledgeBaseBtn.setText("📂 Select Docs Folder");
+        knowledgeBaseBtn.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                knowledgeBaseBtnActionPerformed(evt);
+            }
+        });
+        topLeft.add(knowledgeBaseBtn);
+
+        path.setText("No Docs Selected");
+        topLeft.add(path);
 
         topPanel.add(topLeft);
 
@@ -619,14 +635,34 @@ public class ChatPanel extends javax.swing.JPanel {
        currentMessageWindow.newAgent(); 
     }//GEN-LAST:event_modelListActionPerformed
 
+    private void knowledgeBaseBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_knowledgeBaseBtnActionPerformed
+        getKnowledgeBase();
+    }//GEN-LAST:event_knowledgeBaseBtnActionPerformed
+
+    public void getKnowledgeBase() {
+        JFileChooser chooser = new JFileChooser();
+        chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
+        int result = chooser.showOpenDialog(this);
+
+        if (result == JFileChooser.APPROVE_OPTION) {
+            File selectedDir = chooser.getSelectedFile();
+            knowledgeBase = selectedDir.getAbsolutePath();
+            path.setText("Docs: " + selectedDir.getName()); // Show short name
+            startNewChat();
+        }
+
+        
+    }
       
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private com.generic.tools.ai.components.ChatInputPanel inputPanel;
+    private javax.swing.JButton knowledgeBaseBtn;
     private javax.swing.JPanel leftPanel;
     private com.generic.tools.components.list.UIList list;
     private javax.swing.JComboBox<String> modelList;
     private javax.swing.JButton newChatBtn;
+    private javax.swing.JLabel path;
     private javax.swing.JPanel rightPanel;
     private javax.swing.JSplitPane splitPane;
     private javax.swing.JPanel topLeft;

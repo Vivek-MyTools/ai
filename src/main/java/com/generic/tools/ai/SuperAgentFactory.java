@@ -9,6 +9,9 @@ import java.util.logging.Logger;
 import com.generic.tools.ai.agent.Assistant;
 import com.generic.tools.ai.helper.OllamaHelper;
 import com.generic.tools.ai.tools.*;
+import dev.langchain4j.data.document.Document;
+import dev.langchain4j.data.document.loader.FileSystemDocumentLoader;
+import dev.langchain4j.data.document.parser.apache.tika.ApacheTikaDocumentParser;
 
 import dev.langchain4j.data.document.splitter.DocumentSplitters;
 import dev.langchain4j.data.segment.TextSegment;
@@ -207,35 +210,61 @@ public class SuperAgentFactory {
                 .maxRetries(0)
                 .build();
     }
-
-    // --- RAG SETUP (Unchanged from your previous solid version) ---
+    
     private ContentRetriever setupRAG(String folderPath) {
+        // 1. Create the Embedding Model (process text into vectors)
         AllMiniLmL6V2EmbeddingModel embeddingModel = new AllMiniLmL6V2EmbeddingModel();
+
+        // 2. Create the Store (hold the vectors in memory)
         InMemoryEmbeddingStore<TextSegment> embeddingStore = new InMemoryEmbeddingStore<>();
 
         if (folderPath != null && !folderPath.isEmpty()) {
             Path docDir = Paths.get(folderPath);
-            if (Files.exists(docDir)) {
+
+            if (Files.exists(docDir) && Files.isDirectory(docDir)) {
+                LOG.info("📂 Scanning for documents in: " + docDir.toAbsolutePath());
                 try {
-                    // Logic to load documents... (Abbreviated for brevity as this logic was fine)
-                    EmbeddingStoreIngestor ingestor = EmbeddingStoreIngestor.builder()
-                            .embeddingStore(embeddingStore)
-                            .embeddingModel(embeddingModel)
-                            .documentSplitter(DocumentSplitters.recursive(300, 20))
-                            .build();
-                    
-                    // Note: In real code, re-insert your file scanning logic here
-                    // ingestor.ingest(loadedDocuments); 
+                    // --- STEP A: Load the Files ---
+                    // We use a glob path to recursively find files (e.g., "*.txt", "*.md", or "*" for all)
+                    // Use ApacheTikaDocumentParser if you want to support PDF, DOCX, etc.
+                    // Use TextDocumentParser if you only have .txt files.
+                    List<Document> documents = FileSystemDocumentLoader.loadDocuments(
+                            docDir,
+                            new ApacheTikaDocumentParser() // Or new TextDocumentParser()
+                    );
+
+                    if (documents.isEmpty()) {
+                        LOG.warning("⚠️ No documents found in folder: " + folderPath);
+                    } else {
+                        // --- STEP B: Configure the Ingestor ---
+                        EmbeddingStoreIngestor ingestor = EmbeddingStoreIngestor.builder()
+                                .embeddingStore(embeddingStore)
+                                .embeddingModel(embeddingModel)
+                                .documentSplitter(DocumentSplitters.recursive(500, 50)) // Sized for context windows
+                                .build();
+
+                        // --- STEP C: Actually Ingest (CRITICAL STEP) ---
+                        ingestor.ingest(documents);
+
+                        LOG.info("✅ RAG Ready: Ingested " + documents.size() + " documents into memory.");
+                    }
+
                 } catch (Exception e) {
-                    LOG.severe("RAG Init Failed: " + e.getMessage());
+                    LOG.severe("❌ RAG Ingestion Failed: " + e.getMessage());
+                    e.printStackTrace();
                 }
+            } else {
+                LOG.warning("⚠️ Document folder not found: " + folderPath);
             }
         }
+
+        // 3. Create the Retriever (fetches relevant bits for the LLM)
         return EmbeddingStoreContentRetriever.builder()
                 .embeddingStore(embeddingStore)
                 .embeddingModel(embeddingModel)
-                .maxResults(3) 
-                .minScore(0.6)
+                .maxResults(3) // How many snippets to feed the LLM
+                .minScore(0.5) // Relevance threshold (0.0 to 1.0)
                 .build();
     }
+
 }

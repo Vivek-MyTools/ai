@@ -41,6 +41,7 @@ import javax.swing.text.StyledDocument;
  */
 public class ChatMessagesPanel extends javax.swing.JPanel {
 
+    private javax.swing.Timer themeTimer;
     private int lastConversationIndex = 0;
 
    // --- MASTER REGEX PATTERN ---
@@ -381,29 +382,62 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     }
     
    private void refreshAllComponents() {
-       
         StyledDocument doc = chatPane.getStyledDocument();
         Element root = doc.getDefaultRootElement();
 
-        // 1. Fetch authoritative colors
+        // 1. Set Global Colors Immediately (Instant visual feedback)
         Color currentBg = ChatThemeUtils.getCanvasBackground();
         Color currentFg = ChatThemeUtils.getCanvasForeground();
         
         chatPane.setBackground(currentBg);
         chatPane.setForeground(currentFg);
+        
+        // 2. Stop any previous update task if it's still running
+        if (themeTimer != null && themeTimer.isRunning()) {
+            themeTimer.stop();
+        }
 
-        for (int i = 0; i < root.getElementCount(); i++) {
-            Element line = root.getElement(i);
-            for (int j = 0; j < line.getElementCount(); j++) {
-                Element leaf = line.getElement(j);
-                AttributeSet attrs = leaf.getAttributes();
-                Component comp = StyleConstants.getComponent(attrs);
+        // 3. CHUNKED UPDATE STRATEGY (Non-blocking)
+        // Process 100 elements, then yield to UI thread, then repeat.
+        final int CHUNK_SIZE = 100; 
+        final int totalElements = root.getElementCount();
+        
+        themeTimer = new javax.swing.Timer(1, new java.awt.event.ActionListener() {
+            int currentIndex = 0;
 
-                if (comp instanceof JComponent) {
-                    processComponentBlock((JComponent) comp, currentBg, currentFg);
+            @Override
+            public void actionPerformed(java.awt.event.ActionEvent e) {
+                // Calculate the end index for this batch
+                int limit = Math.min(currentIndex + CHUNK_SIZE, totalElements);
+
+                // Process only this batch
+                for (int i = currentIndex; i < limit; i++) {
+                    Element line = root.getElement(i);
+                    for (int j = 0; j < line.getElementCount(); j++) {
+                        Element leaf = line.getElement(j);
+                        AttributeSet attrs = leaf.getAttributes();
+                        Component comp = StyleConstants.getComponent(attrs);
+
+                        // Process JComponents (Bubbles, Code Blocks, Tables)
+                        if (comp instanceof JComponent) {
+                            processComponentBlock((JComponent) comp, currentBg, currentFg);
+                        }
+                    }
+                }
+                
+                // Move cursor forward
+                currentIndex = limit;
+
+                // Stop if we reached the end
+                if (currentIndex >= totalElements) {
+                    ((javax.swing.Timer)e.getSource()).stop();
                 }
             }
-        }        
+        });
+        
+        // Start immediately
+        themeTimer.setInitialDelay(0);
+        themeTimer.start();
     }
 
     private void processComponentBlock(JComponent panel, Color currentBg, Color currentFg) {
@@ -416,13 +450,16 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             panel = (JComponent) panel.getComponent(0);
         }
 
-        // Delegate to specific handlers
+        // --- 1. CODE BLOCKS ---
         if (panel.getClientProperty("isCodeBlock") != null) {
+            // Force refresh colors on Code Blocks
             CodeBlockFactory.refreshCodeBlock((JPanel) panel, currentBg, currentFg);
         } 
+        // --- 2. USER BUBBLES ---
         else if (panel.getClientProperty("isUserBubble") != null && panel instanceof JPanel) {
             MessageBubbleFactory.applyTheme((JPanel) panel, currentBg);
         } 
+        // --- 3. TABLES ---
         else {
             // Check for Table (might be JPanel or JScrollPane)
             JPanel gridPanel = null;
@@ -553,41 +590,47 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         return chatPane.viewToModel(p);
     }
    
-    
     private void snapToPosition(int index) {
-        // Run in the next event loop cycle to ensure Styles are applied
+        // Use nested invokeLater (Double Barrier)
+        // This waits for the text insertion AND the complex component layout (Code Blocks) 
+        // to finish before we attempt to scroll.
         SwingUtilities.invokeLater(() -> {
-            if (scrollPane == null || scrollPane.getViewport() == null) return;
+            SwingUtilities.invokeLater(() -> {
+                if (scrollPane == null || scrollPane.getViewport() == null) return;
 
-            // CRITICAL FIX: Force the ScrollPane to layout its components IMMEDIATELY.
-            // This calculates the new text height *before* the screen repaints, 
-            // ensuring we jump to the correct spot without a visual "frame skip".
-            scrollPane.validate(); 
+                // Force the ScrollPane to recognize the new heights immediately
+                scrollPane.validate(); 
 
-            try {
-                javax.swing.JScrollBar vsb = scrollPane.getVerticalScrollBar();
-                if (vsb == null) return;
+                try {
+                    javax.swing.JScrollBar vsb = scrollPane.getVerticalScrollBar();
+                    if (vsb == null) return;
 
-                // CASE 1: Stick to Bottom
-                if (index == -1) {
-                     vsb.setValue(vsb.getMaximum());
-                } 
-                // CASE 2: Restore Reading Position
-                else {
-                    Rectangle rect = chatPane.modelToView(index);
-                    if (rect != null) {
-                        Dimension viewSize = scrollPane.getViewport().getViewSize();
-                        Dimension extentSize = scrollPane.getViewport().getExtentSize();
-                        int maxScrollY = viewSize.height - extentSize.height;
-                        
-                        // Clamp value and set immediately
-                        int finalY = Math.min(rect.y, Math.max(0, maxScrollY));
-                        scrollPane.getViewport().setViewPosition(new Point(0, finalY));
+                    // CASE 1: Stick to Bottom (Only if explicitly requested)
+                    if (index == -1) {
+                         vsb.setValue(vsb.getMaximum());
+                    } 
+                    // CASE 2: Restore Reading Position (User Message)
+                    else {
+                        Rectangle rect = chatPane.modelToView(index);
+                        if (rect != null) {
+                            Dimension viewSize = scrollPane.getViewport().getViewSize();
+                            Dimension extentSize = scrollPane.getViewport().getExtentSize();
+                            int maxScrollY = viewSize.height - extentSize.height;
+                            
+                            // Align the User Message to the TOP of the view
+                            int finalY = rect.y;
+                            
+                            // Ensure we don't scroll past valid bounds
+                            finalY = Math.min(finalY, Math.max(0, maxScrollY));
+                            
+                            scrollPane.getViewport().setViewPosition(new Point(0, finalY));
+                        }
                     }
-                }
-            } catch (Exception ignored) { }
+                } catch (Exception ignored) { }
+            });
         });
     }
+    
    
     @SuppressWarnings("unchecked")
     // <editor-fold defaultstate="collapsed" desc="Generated Code">//GEN-BEGIN:initComponents

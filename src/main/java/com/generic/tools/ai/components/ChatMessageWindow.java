@@ -41,7 +41,7 @@ public class ChatMessageWindow {
             if (!customSystemRules.isEmpty()) {
                 fullSystemPrompt += "\n" + customSystemRules;
             }            
-            
+            System.out.println("Creating new agent with KnowledgeBase = " + knowledgeBase);
             chatAgent = factory.createSuperAgent(
                     knowledgeBase,
                     fullSystemPrompt,
