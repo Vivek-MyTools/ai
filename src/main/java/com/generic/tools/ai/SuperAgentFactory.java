@@ -122,53 +122,52 @@ public class SuperAgentFactory {
                 .build();
     }
     
-    private ChatLanguageModel createLanguageModel() {
-        String cacheKey = this.modelName + "::" + (this.customBaseUrl != null ? this.customBaseUrl : "default");
+private ChatLanguageModel createLanguageModel() {
+    String cacheKey = this.modelName + "::" + (this.customBaseUrl != null ? this.customBaseUrl : "default");
 
-        return modelCache.computeIfAbsent(cacheKey, key -> {
+    return modelCache.computeIfAbsent(cacheKey, key -> {
+        String normalizedName = modelName.toLowerCase();
+
+        // 1. Google Gemini
+        if (normalizedName.startsWith("gemini")) {
+            return createGeminiModel();
+        }
+
+        // 2. OLLAMA (Local & Cloud)
+        boolean isCloudModel = normalizedName.contains("-cloud");
+        if (isCloudModel || normalizedName.contains("llama") || OllamaHelper.isOllamaModel(modelName)) {
             
-            String normalizedName = modelName.toLowerCase();
+            // URL handling to avoid the 404 /api/api/chat issue
+            String ollamaUrl = (isCloudModel && !OllamaHelper.isOllamaAvailable()) 
+                               ? "https://ollama.com" 
+                               : OllamaHelper.getOllamaBaseUrl();
 
-            // 1. Google Gemini (Distinct API)
-            if (normalizedName.startsWith("gemini")) {
-                return createGeminiModel();
+            // Fetch key from constructor or ENV
+            String effectiveKey = (this.apiKey != null) ? this.apiKey : System.getenv("OLLAMA_API_KEY");
+            LOG.info("Creating Agent using >>>>>OLLAMA_API_KEY !!<<<<<<");
+            var builder = OllamaChatModel.builder()
+                    .baseUrl(ollamaUrl)
+                    .modelName(this.modelName)
+                    .temperature(0.0)
+                    .timeout(Duration.ofMinutes(5))
+                    .numCtx(8192);
+
+            // CRITICAL: This is what solves the 401 error
+            if (effectiveKey != null && !effectiveKey.isBlank()) {
+                builder.customHeaders(Collections.singletonMap("Authorization", "Bearer " + effectiveKey));
+                LOG.info("🔐 Authorization header successfully injected for " + modelName);
+            } else if (isCloudModel) {
+                throw new RuntimeException("CRITICAL: OLLAMA_API_KEY is missing but required for cloud model.");
             }
 
-            // 2. CHECK OLLAMA FIRST (The Fix)
-            // We check this BEFORE OpenAI to catch names like "gpt-oss" or "gpt-local"
-            boolean looksLikeOllama = normalizedName.contains("oss") 
-                                   || normalizedName.contains("local")
-                                   || normalizedName.contains("llama")
-                                   || OllamaHelper.isOllamaModel(modelName); // Checks installed models & known families
+            return builder.build();
+        }
 
-            if (OllamaHelper.isOllamaAvailable() && looksLikeOllama) {
-                String ollamaUrl = OllamaHelper.getOllamaBaseUrl(); 
-                LOG.info("⚡ Using Local Ollama for [" + modelName + "] at: " + ollamaUrl);
-                
-                return OllamaChatModel.builder()
-                        .baseUrl(ollamaUrl)
-                        .modelName(this.modelName)
-                        .temperature(0.0)
-                        .timeout(Duration.ofMinutes(5)) 
-                        .maxRetries(0) 
-                        .numCtx(8192)  
-                        .build();
-            }
+        // 3. OpenAI / Fallback
+        return createOpenAiModel(resolveOpenAiBaseUrl());
+    });
+}
 
-            // 3. Explicit OpenAI (Standard Cloud)
-            // Only catches "gpt" if it wasn't caught by the Ollama check above.
-            if (normalizedName.startsWith("gpt") || normalizedName.startsWith("o1")) {
-                return createOpenAiModel(resolveOpenAiBaseUrl());
-            }
-
-            // 4. Fallback (Universal)
-            // If we are here, it's a model we don't recognize (e.g. "deepseek-coder").
-            // We assume it's an OpenAI-compatible endpoint (Groq, OpenRouter, etc)
-            // unless Ollama is explicitly strictly configured (omitted for flexibility).
-            LOG.warning("⚠️ Unrecognized model prefix. Defaulting to OpenAI-compatible Client for: " + this.modelName);
-            return createOpenAiModel(resolveOpenAiBaseUrl());
-        });
-    }
     // --- HELPER: Resolve OpenAI URL ---
     // Returns the custom URL if the user gave one, otherwise the official OpenAI URL.
     private String resolveOpenAiBaseUrl() {
