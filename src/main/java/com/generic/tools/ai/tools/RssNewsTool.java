@@ -26,7 +26,7 @@ public class RssNewsTool {
             1. Use this tool ONLY when the user explicitly asks for latest news or headlines.
             2. DO NOT use this tool for summarization, opinions, or historical news analysis.
             3. DO NOT fabricate or guess headlines.
-            4. Output MUST be raw headline titles with their corresponding URLs.
+            4. Output MUST be raw headline, description, titles with their corresponding URLs.
             5. If the user asks for explanation or summary, call this tool FIRST, then summarize.
             """)
     public String fetchLatestHeadlines() {
@@ -46,12 +46,28 @@ public class RssNewsTool {
 
                 String title = getTextContent(item, "title");
                 String link  = getTextContent(item, "link");
+                
+                String rawDescription = getTextContent(item, "description");
+               
+                String unescaped = rawDescription.replace("&lt;", "<")
+                                                 .replace("&gt;", ">")
+                                                 .replace("&quot;", "\"")
+                                                 .replace("&amp;", "&");
 
+                // 3. Strip the HTML tags
+                String cleanDescription = unescaped.replaceAll("<[^>]*>", "").trim();
+                
+                // 4. Limit to 2-4 lines (approx 200 characters)
+                if (cleanDescription.length() > 200) {
+                    cleanDescription = cleanDescription.substring(0, 197) + "...";
+                }
                 result.append(i + 1)
                       .append(". ")
                       .append(title)
                       .append("\n   ")
                       .append(link)
+                      .append("\n   ")
+                      .append(cleanDescription)
                       .append("\n\n");
             }
 

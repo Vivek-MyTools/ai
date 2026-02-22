@@ -10,6 +10,7 @@ import java.util.regex.Pattern;
 import javax.swing.Icon;
 import javax.swing.JTextPane;
 import javax.swing.SwingUtilities;
+import javax.swing.text.AttributeSet;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.SimpleAttributeSet;
 import javax.swing.text.StyleConstants;
@@ -18,7 +19,7 @@ import javax.swing.text.StyledDocument;
 public class TableCellRenderer {
 
     // Regex for Markdown links [text](url) or raw URLs
-    private static final Pattern LINK_PATTERN = Pattern.compile("<?(https?://[^\\s]+)>?|\\[(.*?)\\]\\((https?://.*?)\\)");
+    private static final Pattern LINK_PATTERN = Pattern.compile("<(https?://[^>\\s]+)>|\\[(.*?)\\]\\((https?://.*?)\\)");
     
     // MASTER REGEX: Matches Code (`...`) OR Math ($$, \(, \[, $)
     private static final Pattern CELL_MASTER_PATTERN = Pattern.compile(
@@ -87,12 +88,41 @@ public class TableCellRenderer {
             Color c = textColor;
             StyleConstants.setForeground(mainAttrs, c); 
             StyleConstants.setForeground(codeAttrs, c); 
-        }
+        }       
+        
+        textComp.addMouseMotionListener(new MouseAdapter() {
+            @Override
+            public void mouseMoved(MouseEvent e) {
+                int pos = textComp.viewToModel2D(e.getPoint());
+                if (pos >= 0) {
+                    StyledDocument doc = textComp.getStyledDocument();
+                    AttributeSet attr = doc.getCharacterElement(pos).getAttributes();
 
+                    // Check if the character has the "linkURL" attribute we set during parsing
+                    if (attr.getAttribute("linkURL") != null) {
+                        textComp.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+                        return;
+                    }
+                }
+                textComp.setCursor(Cursor.getPredefinedCursor(Cursor.DEFAULT_CURSOR));
+            }
+        });
+        
         parseContent(textComp, displayText, mainAttrs, codeAttrs);
         return textComp;
     }
 
+    
+    private static String getUrlAtPoint(JTextPane textComp, java.awt.Point pt) {
+        int pos = textComp.viewToModel2D(pt);
+        if (pos >= 0) {
+            StyledDocument doc = textComp.getStyledDocument();
+            AttributeSet attr = doc.getCharacterElement(pos).getAttributes();
+            return (String) attr.getAttribute("linkURL");
+        }
+        return null;
+    }
+    
     private static void parseContent(JTextPane textComp, String text, SimpleAttributeSet mainAttrs, SimpleAttributeSet codeAttrs) {
         try {
             StyledDocument doc = textComp.getStyledDocument();
@@ -112,7 +142,7 @@ public class TableCellRenderer {
                     doc.insertString(doc.getLength(), codeContent, codeAttrs);
                 } 
                 // Group 3: Math ($...$ etc)
-                else {
+                else if (matcher.group(3) != null)  {
                     String mathRaw = matcher.group(); 
                     String mathContent = MathRenderer.extractMathContent(mathRaw);
                     
@@ -127,6 +157,21 @@ public class TableCellRenderer {
                     } else { 
                         // Fallback: Smart insert the raw math text
                         ChatThemeUtils.smartInsert(doc, mathRaw, mainAttrs); 
+                    }
+                } else {
+                    String display = null; String url = null;
+                    if (matcher.group(6) != null) { url = matcher.group(7); display = url; }
+                    else if (matcher.group(8) != null) { display = matcher.group(9); url = matcher.group(10); }
+                    else if (matcher.group(11) != null) { url = matcher.group(11); display = url; }
+
+                    if (url != null) {
+                        SimpleAttributeSet linkAttrs = new SimpleAttributeSet(mainAttrs);
+                        StyleConstants.setForeground(linkAttrs, Color.BLUE);
+                        StyleConstants.setUnderline(linkAttrs, true);
+                        linkAttrs.addAttribute("linkURL", url);
+
+                        // FIXED: Use smartInsert for display text to handle emojis/icons inside links
+                        ChatThemeUtils.smartInsert(doc, display, linkAttrs);
                     }
                 }
                 lastIdx = matcher.end();
