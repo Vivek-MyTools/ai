@@ -20,64 +20,68 @@ public class RssNewsTool {
     private static final String RSS_URL = "https://news.abplive.com/news/india/feed";
 
     @Tool("""
-            Fetches the latest world news headlines from a public RSS feed.
-
-            STRICT USAGE RULES:
-            1. Use this tool ONLY when the user explicitly asks for latest news or headlines.
-            2. DO NOT use this tool for summarization, opinions, or historical news analysis.
-            3. DO NOT fabricate or guess headlines.
-            4. Output MUST be raw headline, description, titles with their corresponding URLs.
-            5. If the user asks for explanation or summary, call this tool FIRST, then summarize.
+            Fetches the latest news. For each item, you MUST include:
+            1. The Headline (Heading).
+            2. A 2-4 line summary of the content.
+            3. The clickable URL/Link labeled as 'Source'.
             """)
     public String fetchLatestHeadlines() {
-        LOG.info("   --> 📰 RSS News Tool: Fetching latest headlines");
-
+        LOG.info("   --> 📰 RSS News Tool: Fetching headlines, summaries, and links");
         StringBuilder result = new StringBuilder();
-        try (InputStream stream = new URL(RSS_URL).openStream()) {
+
+        try {
+            // 1. Read the feed and fix the '&' error
+            String rawXml;
+            try (InputStream is = new URL(RSS_URL).openStream()) {
+                rawXml = new String(is.readAllBytes(), java.nio.charset.StandardCharsets.UTF_8);
+            }
+            
+            // Fix broken ampersands ONLY (prevents breaking links)
+            String fixedXml = rawXml.replaceAll("&(?!(amp|lt|gt|quot|apos|#\\d+);)", "&amp;");
 
             Document doc = DocumentBuilderFactory.newInstance()
                     .newDocumentBuilder()
-                    .parse(stream);
+                    .parse(new java.io.ByteArrayInputStream(fixedXml.getBytes()));
 
             NodeList items = doc.getElementsByTagName("item");
 
-            for (int i = 0; i < items.getLength(); i++) {
+            // Limit to top 5 to ensure the AI doesn't get overwhelmed
+            for (int i = 0; i < Math.min(items.getLength(), 5); i++) {
                 Element item = (Element) items.item(i);
-
+                
                 String title = getTextContent(item, "title");
-                String link  = getTextContent(item, "link");
-                
-                String rawDescription = getTextContent(item, "description");
-               
-                String unescaped = rawDescription.replace("&lt;", "<")
-                                                 .replace("&gt;", ">")
-                                                 .replace("&quot;", "\"")
-                                                 .replace("&amp;", "&");
+                String link  = getTextContent(item, "link").trim();
+                String rawDesc = getTextContent(item, "description");
 
-                // 3. Strip the HTML tags
-                String cleanDescription = unescaped.replaceAll("<[^>]*>", "").trim();
+                // 2. Clean the summary (2-4 lines)
+                String unescaped = rawDesc.replace("&lt;", "<").replace("&gt;", ">")
+                                          .replace("&quot;", "\"").replace("&amp;", "&")
+                                          .replace("&rsquo;", "'").replace("&nbsp;", " ");
                 
-                // 4. Limit to 2-4 lines (approx 200 characters)
-                if (cleanDescription.length() > 200) {
-                    cleanDescription = cleanDescription.substring(0, 197) + "...";
+                String cleanDescription = unescaped.replaceAll("<[^>]*>", " ").trim();
+                
+                // Truncate to ~250 characters (about 3 lines)
+                if (cleanDescription.length() > 250) {
+                    cleanDescription = cleanDescription.substring(0, 247) + "...";
                 }
-                result.append(i + 1)
-                      .append(". ")
-                      .append(title)
-                      .append("\n   ")
-                      .append(link)
-                      .append("\n   ")
-                      .append(cleanDescription)
-                      .append("\n\n");
-            }
 
-            return result.toString().trim();
+                // 3. Construct result with Markdown (AI loves this format)
+                result.append("### ").append(title).append("\n")
+                      .append(cleanDescription).append("\n")
+                      .append("Source: ").append(link).append("\n\n");
+            }
+            
+            String finalOutput = result.toString().trim();
+            // Log this to your console to verify the links are actually there!
+            System.out.println("DEBUG TOOL OUTPUT: " + finalOutput);
+            return finalOutput;
 
         } catch (Exception e) {
-            System.err.println("RSS Tool error: " + e.getMessage());
-            return "ERROR: Unable to fetch latest news";
+            LOG.severe("RSS Tool error: " + e.getMessage());
+            return "ERROR: Unable to process news feed.";
         }
     }
+    
 
     private String getTextContent(Element parent, String tagName) {
         NodeList list = parent.getElementsByTagName(tagName);
