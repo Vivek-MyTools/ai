@@ -20,6 +20,70 @@ public class ChatInputPanel extends javax.swing.JPanel {
     public ChatInputPanel() {
         initComponents();
         initActions();
+        initAutoResize();
+    }
+  
+    private void initAutoResize() {
+        // 1. Force text to wrap to the next line instead of scrolling sideways
+        inputArea.setLineWrap(true);
+        inputArea.setWrapStyleWord(true);
+
+        // 2. Listen for text changes
+        inputArea.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) { adjustHeight(); }
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) { adjustHeight(); }
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) { adjustHeight(); }
+        });
+    }
+
+    private void adjustHeight() {
+        int minRows = 2;  // Starting height
+        int maxRows = 30; // Max height before scrollbar kicks in
+
+        java.awt.FontMetrics fm = inputArea.getFontMetrics(inputArea.getFont());
+        int rowHeight = fm.getHeight();
+        if (rowHeight == 0) return; // Failsafe
+
+        // --- THE FIX ---
+        // Temporarily set rows to 0 so getPreferredSize calculates based PURELY 
+        // on the current text content, ignoring whatever size it grew to previously.
+        int currentRows = inputArea.getRows();
+        inputArea.setRows(0); 
+        int preferredHeight = inputArea.getPreferredSize().height;
+        inputArea.setRows(currentRows); // Restore immediately (causes no visual flicker)
+        // ---------------
+        
+        java.awt.Insets insets = inputArea.getInsets();
+        int innerHeight = preferredHeight - insets.top - insets.bottom;
+        
+        // Calculate visual lines (safeguard against 0)
+        int currentVisualLines = Math.max(1, innerHeight / rowHeight);
+
+        // Determine the new row count, bounded by min and max
+        int targetRows = Math.max(minRows, Math.min(currentVisualLines, maxRows));
+
+        // Apply changes if the row count needs to update
+        if (inputArea.getRows() != targetRows) {
+            inputArea.setRows(targetRows);
+            
+            // Revalidate the scroll pane and the panel to redraw the UI
+            if (scrollPane != null) {
+                scrollPane.revalidate();
+            }
+            revalidate();
+            
+            // Tell the parent window to adjust
+            if (getParent() != null) {
+                getParent().revalidate();
+            }
+        }
+    }
+    
+    public void clearInput() {
+        inputArea.setText("");        
     }
     
      private void initActions() {
@@ -104,10 +168,6 @@ public class ChatInputPanel extends javax.swing.JPanel {
     // ===== Public API =====
     public void setOnSend(Consumer<String> onSend) {
         this.onSend = onSend;
-    }
-
-    public void clearInput() {
-        inputArea.setText("");
     }
 
     public void setEnabledInput(boolean enabled) {

@@ -18,44 +18,38 @@ import javax.swing.text.StyledDocument;
 
 public class ChatThemeUtils {
 
-    // --- CORE FIX: Robust Smart Insert ---
     public static void smartInsert(StyledDocument doc, String text, AttributeSet baseAttr) throws BadLocationException {
         if (text == null || text.isEmpty()) return;
 
-        // 1. CHECK FOR COMPLEX CHARACTERS
-        // If the text contains ANY non-ASCII character (like Emojis, Math symbols, or accented chars),
-        // we SKIP the "Fast Path". "Dialog" font often lies about supporting these in Tables.
+        // 1. IMPROVED COMPLEX CHARACTER CHECK
         boolean hasComplexChars = false;
         for (int i = 0; i < text.length(); i++) {
-            if (text.charAt(i) > 127) {
+            char c = text.charAt(i);
+            // We MUST include digits (0-9) because they are the base for Keycap Emojis (9️⃣)
+            if (c > 127 || Character.isDigit(c)) {
                 hasComplexChars = true;
                 break;
             }
         }
 
-        // 2. FAST PATH (Only for pure English/ASCII)
-        // This keeps the chat fast for normal text.
         if (!hasComplexChars) {
             doc.insertString(doc.getLength(), text, baseAttr);
             return;
         }
 
-        // 3. SLOW PATH (Character-by-Character Font Check)
-        // We forcibly find the best font for every single special character.
+        // 2. CHARACTER-BY-CHARACTER WITH SEQUENCE SUPPORT
         int index = 0;
         Font defaultFont = getFontFromAttr(baseAttr);
-        
+
         while (index < text.length()) {
             int codePoint = text.codePointAt(index);
             int charCount = Character.charCount(codePoint);
-            String singleChar = new String(Character.toChars(codePoint));
+            String singleChar = text.substring(index, index + charCount);
 
-            // Check if standard font handles it VISUALLY (not just logically)
-            // We use a stricter check here: if it's complex, we prefer the Smart Font lookup
-            // unless the default font is ALREADY a specific Unicode font.
-            boolean useDefault = (codePoint <= 127) || (defaultFont.canDisplayUpTo(singleChar) == -1);
+            // STRICTOR CHECK: If it's a digit or a high-range symbol, force fallback font check
+            boolean useDefault = (codePoint <= 127 && !Character.isDigit(codePoint)) 
+                                && (defaultFont.canDisplayUpTo(singleChar) == -1);
 
-            // Double-check: If it's an Emoji/Symbol, forcing lookup is safer than trusting 'useDefault'
             if (isEmojiOrSymbol(codePoint)) {
                 useDefault = false; 
             }
@@ -63,23 +57,22 @@ public class ChatThemeUtils {
             if (useDefault) {
                 doc.insertString(doc.getLength(), singleChar, baseAttr);
             } else {
-                // Find the specific font that supports this character (e.g., Segoe UI Emoji)
+                // Find a font that specifically handles this glyph (e.g., Segoe UI Emoji)
                 String fallbackFontName = getSmartFontName(singleChar);
-                
                 SimpleAttributeSet fallbackAttrs = new SimpleAttributeSet(baseAttr);
                 StyleConstants.setFontFamily(fallbackAttrs, fallbackFontName);
-                
                 doc.insertString(doc.getLength(), singleChar, fallbackAttrs);
             }
-            
             index += charCount;
         }
     }
-    
-    // Helper to identify characters that often break "Dialog" font
+
     private static boolean isEmojiOrSymbol(int codePoint) {
-        return (codePoint >= 0x2000 && codePoint <= 0x3300) || // General Symbols / Dingbats
-               (codePoint >= 0x1F000); // Emojis / Supplemental
+        return (codePoint >= 0x2000 && codePoint <= 0x3300) || // General Symbols
+               (codePoint >= 0x1F000 && codePoint <= 0x1F9FF) || // Emojis & Enclosed Supplement
+               (codePoint >= 0xFE00 && codePoint <= 0xFE0F) ||   // Variation Selectors
+               (codePoint >= 0x20D0 && codePoint <= 0x20FF) ||   // Combining Marks (Keycaps)
+               Character.isDigit(codePoint);                     // Treat digits as potential symbols
     }
 
     private static Font getFontFromAttr(AttributeSet attr) {
@@ -96,14 +89,13 @@ public class ChatThemeUtils {
     public static String getSmartFontName(String text) {
         if (text == null || text.trim().isEmpty()) return getUnicodeFontName();
 
-        // Priority List
         String[] priorities = {
             "Segoe UI Emoji",   // Windows: Best for Emojis
             "Apple Color Emoji",// Mac: Best for Emojis
+            "Segoe UI Symbol",  // Windows: Essential for Math/Tech Symbols
+            "Arial Unicode MS", // Universal: Massive character coverage
             "Nirmala UI",       // Windows: Good for Indic/Symbols
-            "Segoe UI Symbol",  // Windows: Math/Symbols
             "Cambria Math",     
-            "Arial Unicode MS", 
             "Noto Color Emoji", // Linux
             "Noto Sans",
             Font.SANS_SERIF, 

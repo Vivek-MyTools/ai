@@ -164,6 +164,14 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
         return null;
     }
     
+    public void clearChat() {
+        chatPane.setText("");
+        messageHistory.clear();
+        lastConversationIndex = 0;
+        
+        initStyles();
+    }
+    
     private void loadIcons() {
         java.net.URL imgUrl = getClass().getResource("/chat/icons8-user-24.png");
         if (imgUrl != null) {
@@ -208,10 +216,12 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         chatPane.setBackground(bg);
         chatPane.setForeground(fg);
-
+        
+        int fontSize = 14;
         StyledDocument doc = chatPane.getStyledDocument();
         String mainFontName = ChatThemeUtils.getUnicodeFontName();        
-        int fontSize = 14;
+        chatPane.setFont(new Font(mainFontName, Font.PLAIN, fontSize));
+        
 
         // ... (Keep your existing Style definitions here: agentName, agentMsg, etc.) ...
         agentName = chatPane.addStyle("AgentName", null);
@@ -648,7 +658,6 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
 
         javax.swing.text.DefaultCaret caret = (javax.swing.text.DefaultCaret) chatPane.getCaret();
         caret.setUpdatePolicy(javax.swing.text.DefaultCaret.NEVER_UPDATE);
-        chatPane.setFont(new java.awt.Font("Dialog", 0, 14)); // NOI18N
         scrollPane.setViewportView(chatPane);
         chatPane.setEditable(false);
 

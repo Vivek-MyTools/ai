@@ -3,6 +3,7 @@ package com.generic.tools.ai.components;
 import com.generic.tools.ai.TitleGenerator;
 import com.generic.tools.ai.helper.ChatHistoryManager;
 import com.generic.tools.ai.helper.ChatSession;
+import com.generic.tools.lnf.theme.LnfTheme;
 import java.io.File;
 
 import java.util.ArrayList;
@@ -82,14 +83,12 @@ public class ChatPanel extends javax.swing.JPanel {
 
         // 4. Start load sequence AND Collapse Right Pane
         javax.swing.SwingUtilities.invokeLater(() -> {
-            startupSequence();
-            
-            // --- ADD THIS LINE ---
-            // 1.0 means 100% space to the Left, 0% to the Right
-            splitPane.setDividerLocation(1.0); 
-            // --------------------
+            startupSequence();                        
+            splitPane.setRightComponent(null);
+            splitPane.setDividerLocation(1);             
         });
-
+        
+        LnfTheme.getInstance().addComponent(rightPanel);
        
     }
     
@@ -564,12 +563,14 @@ public class ChatPanel extends javax.swing.JPanel {
         knowledgeBaseBtn = new javax.swing.JButton();
         path = new javax.swing.JLabel();
         topRight = new javax.swing.JPanel();
-        newChatBtn = new javax.swing.JButton();
+        addNewChatBtn = new com.generic.tools.components.button.UIButton();
+        clearCharBtn = new com.generic.tools.components.button.UIButton();
+        uIButton1 = new com.generic.tools.components.button.UIButton();
 
         setLayout(new java.awt.BorderLayout());
 
         splitPane.setDividerSize(3);
-        splitPane.setResizeWeight(1.0);
+        splitPane.setResizeWeight(0.7);
         splitPane.setOneTouchExpandable(true);
 
         rightPanel.setLayout(new javax.swing.BoxLayout(rightPanel, javax.swing.BoxLayout.PAGE_AXIS));
@@ -579,6 +580,10 @@ public class ChatPanel extends javax.swing.JPanel {
 
         leftPanel.setLayout(new java.awt.BorderLayout());
         leftPanel.add(inputPanel, java.awt.BorderLayout.PAGE_END);
+
+        splitPane.setLeftComponent(leftPanel);
+
+        add(splitPane, java.awt.BorderLayout.CENTER);
 
         topPanel.setLayout(new javax.swing.BoxLayout(topPanel, javax.swing.BoxLayout.LINE_AXIS));
 
@@ -607,28 +612,37 @@ public class ChatPanel extends javax.swing.JPanel {
 
         topRight.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.RIGHT));
 
-        newChatBtn.setIcon(new javax.swing.ImageIcon(getClass().getResource("/chat/icons8-chat-20.png"))); // NOI18N
-        newChatBtn.setText("New Chat");
-        newChatBtn.setPreferredSize(new java.awt.Dimension(114, 25));
-        newChatBtn.addActionListener(new java.awt.event.ActionListener() {
+        addNewChatBtn.setIcon(new javax.swing.ImageIcon(getClass().getResource("/chat/icons8-chat-16.png"))); // NOI18N
+        addNewChatBtn.setToolTipText("New Chat Window");
+        addNewChatBtn.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
-                newChatBtnActionPerformed(evt);
+                addNewChatBtnActionPerformed(evt);
             }
         });
-        topRight.add(newChatBtn);
+        topRight.add(addNewChatBtn);
+
+        clearCharBtn.setIcon(new javax.swing.ImageIcon(getClass().getResource("/chat/icons8-clear-16.png"))); // NOI18N
+        clearCharBtn.setToolTipText("Clear Chat History");
+        clearCharBtn.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                clearCharBtnActionPerformed(evt);
+            }
+        });
+        topRight.add(clearCharBtn);
+
+        uIButton1.setIcon(new javax.swing.ImageIcon(getClass().getResource("/chat/icons8-show-sidepanel-16.png"))); // NOI18N
+        uIButton1.setToolTipText("Show/Hide List");
+        uIButton1.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                uIButton1ActionPerformed(evt);
+            }
+        });
+        topRight.add(uIButton1);
 
         topPanel.add(topRight);
 
-        leftPanel.add(topPanel, java.awt.BorderLayout.PAGE_START);
-
-        splitPane.setLeftComponent(leftPanel);
-
-        add(splitPane, java.awt.BorderLayout.CENTER);
+        add(topPanel, java.awt.BorderLayout.PAGE_START);
     }// </editor-fold>//GEN-END:initComponents
-
-    private void newChatBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_newChatBtnActionPerformed
-       startNewChat();
-    }//GEN-LAST:event_newChatBtnActionPerformed
 
     private void modelListActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_modelListActionPerformed
        currentMessageWindow.setModel((String) modelList.getSelectedItem());
@@ -638,6 +652,20 @@ public class ChatPanel extends javax.swing.JPanel {
     private void knowledgeBaseBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_knowledgeBaseBtnActionPerformed
         getKnowledgeBase();
     }//GEN-LAST:event_knowledgeBaseBtnActionPerformed
+
+    private void addNewChatBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_addNewChatBtnActionPerformed
+        startNewChat();
+    }//GEN-LAST:event_addNewChatBtnActionPerformed
+
+    private void uIButton1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_uIButton1ActionPerformed
+         splitPane.setRightComponent(splitPane.getRightComponent() != null ? null : rightPanel);
+    }//GEN-LAST:event_uIButton1ActionPerformed
+
+    private void clearCharBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_clearCharBtnActionPerformed
+        if (currentMessageWindow != null) {
+            currentMessageWindow.getChatMessagesPanel().clearChat();
+        }
+    }//GEN-LAST:event_clearCharBtnActionPerformed
 
     public void getKnowledgeBase() {
         JFileChooser chooser = new JFileChooser();
@@ -656,17 +684,19 @@ public class ChatPanel extends javax.swing.JPanel {
       
 
     // Variables declaration - do not modify//GEN-BEGIN:variables
+    private com.generic.tools.components.button.UIButton addNewChatBtn;
+    private com.generic.tools.components.button.UIButton clearCharBtn;
     private com.generic.tools.ai.components.ChatInputPanel inputPanel;
     private javax.swing.JButton knowledgeBaseBtn;
     private javax.swing.JPanel leftPanel;
     private com.generic.tools.components.list.UIList list;
     private javax.swing.JComboBox<String> modelList;
-    private javax.swing.JButton newChatBtn;
     private javax.swing.JLabel path;
     private javax.swing.JPanel rightPanel;
     private javax.swing.JSplitPane splitPane;
     private javax.swing.JPanel topLeft;
     private javax.swing.JPanel topPanel;
     private javax.swing.JPanel topRight;
+    private com.generic.tools.components.button.UIButton uIButton1;
     // End of variables declaration//GEN-END:variables
 }

@@ -21,16 +21,17 @@ public class TableCellRenderer {
     // Regex for Markdown links [text](url) or raw URLs
     private static final Pattern LINK_PATTERN = Pattern.compile("<(https?://[^>\\s]+)>|\\[(.*?)\\]\\((https?://.*?)\\)");
     
-    // MASTER REGEX: Matches Code (`...`) OR Math ($$, \(, \[, $)
     private static final Pattern CELL_MASTER_PATTERN = Pattern.compile(
-        "(`([^`]+)`)|" + 
-        "((\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]|\\$(?!\\{)([^$]+?)\\$))" 
+        "(`([^`]+)`) | " + 
+        "((\\$\\$(?s:.*?)\\$\\$|\\\\\\((?s:.*?)\\\\\\)|\\\\\\[(?s:.*?)\\\\\\]|\\$(?!\\{)([^$]+?)\\$)) | " +
+        "(<(https?://[^>\\s]+)>|\\[(.*?)\\]\\((https?://.*?)\\)|(https?://[^\\s]+))",
+        Pattern.COMMENTS
     );
 
     public static JTextPane createCellComponent(String rawText, boolean isHeader, Color textColor, Color linkColor) {
         // 1. Basic Sanitization
         if (rawText == null) rawText = "";
-        rawText = rawText.replace("\u00A0", " ").replace("\uFE0F", "");
+        rawText = rawText.replace("\u00A0", " ").replace("\uFE0F", ""); // \uFE0F fix for emojis
         rawText = rawText.replace("<br>", "\n").replace("<br/>", "\n").trim();
         
         // 2. Handle Markdown Bold/Italic
@@ -108,7 +109,7 @@ public class TableCellRenderer {
             }
         });
         
-        parseContent(textComp, displayText, mainAttrs, codeAttrs);
+        parseContent(textComp, displayText, mainAttrs, codeAttrs, linkColor);
         return textComp;
     }
 
@@ -123,70 +124,53 @@ public class TableCellRenderer {
         return null;
     }
     
-    private static void parseContent(JTextPane textComp, String text, SimpleAttributeSet mainAttrs, SimpleAttributeSet codeAttrs) {
+   private static void parseContent(JTextPane textComp, String text, SimpleAttributeSet mainAttrs, SimpleAttributeSet codeAttrs, Color linkColor) {
         try {
             StyledDocument doc = textComp.getStyledDocument();
             Matcher matcher = CELL_MASTER_PATTERN.matcher(text);
             int lastIdx = 0;
             
             while (matcher.find()) {
-                // Insert Regular Text (Uses Updated Smart Insert)
                 String preText = text.substring(lastIdx, matcher.start());
-                if (!preText.isEmpty()) {
+                if (!preText.isEmpty()) {                    
                     ChatThemeUtils.smartInsert(doc, preText, mainAttrs);
-                }
+                }                
                 
-                // Group 1: Code (`...`)
-                if (matcher.group(1) != null) {
-                    String codeContent = matcher.group(2); 
-                    doc.insertString(doc.getLength(), codeContent, codeAttrs);
+                if (matcher.group(1) != null) { // Code
+                    ChatThemeUtils.smartInsert(doc, matcher.group(2), codeAttrs);
                 } 
-                // Group 3: Math ($...$ etc)
-                else if (matcher.group(3) != null)  {
-                    String mathRaw = matcher.group(); 
-                    String mathContent = MathRenderer.extractMathContent(mathRaw);
-                    
-                    Icon icon = MathRenderer.latexToIcon(mathRaw, mathContent, StyleConstants.getForeground(mainAttrs));
-                    
-                    if (icon != null) { 
-                        SimpleAttributeSet iconAttrs = new SimpleAttributeSet(mainAttrs); 
+                else if (matcher.group(3) != null) { // Math
+                    String raw = matcher.group(3);
+                    String content = MathRenderer.extractMathContent(raw);
+                    Icon icon = MathRenderer.latexToIcon(raw, content, StyleConstants.getForeground(mainAttrs));
+                    if (icon != null) {
+                        SimpleAttributeSet iconAttrs = new SimpleAttributeSet(mainAttrs);
                         StyleConstants.setIcon(iconAttrs, icon);
-                        iconAttrs.addAttribute("LatexRaw", mathRaw);
-                        iconAttrs.addAttribute("LatexContent", mathContent);
-                        doc.insertString(doc.getLength(), " ", iconAttrs); 
-                    } else { 
-                        // Fallback: Smart insert the raw math text
-                        ChatThemeUtils.smartInsert(doc, mathRaw, mainAttrs); 
+                        // Add attributes for TableClipboardUtils
+                        iconAttrs.addAttribute("LatexRaw", raw);
+                        iconAttrs.addAttribute("LatexContent", content);
+                        doc.insertString(doc.getLength(), " ", iconAttrs);
+                    } else {
+                        ChatThemeUtils.smartInsert(doc, raw, mainAttrs);
                     }
-                } else {
-                    String display = null; String url = null;
+                } 
+                else { // Links
+                    String display = ""; String url = "";
                     if (matcher.group(6) != null) { url = matcher.group(7); display = url; }
                     else if (matcher.group(8) != null) { display = matcher.group(9); url = matcher.group(10); }
                     else if (matcher.group(11) != null) { url = matcher.group(11); display = url; }
 
-                    if (url != null) {
-                        SimpleAttributeSet linkAttrs = new SimpleAttributeSet(mainAttrs);
-                        StyleConstants.setForeground(linkAttrs, Color.BLUE);
-                        StyleConstants.setUnderline(linkAttrs, true);
-                        linkAttrs.addAttribute("linkURL", url);
-
-                        // FIXED: Use smartInsert for display text to handle emojis/icons inside links
-                        ChatThemeUtils.smartInsert(doc, display, linkAttrs);
-                    }
+                    SimpleAttributeSet linkAttrs = new SimpleAttributeSet(mainAttrs);
+                    StyleConstants.setForeground(linkAttrs, linkColor);
+                    StyleConstants.setUnderline(linkAttrs, true);
+                    linkAttrs.addAttribute("linkURL", url); // Tag for mouse listener
+                    
+                    ChatThemeUtils.smartInsert(doc, display, linkAttrs);
                 }
                 lastIdx = matcher.end();
             }
-            
-            // Insert remaining text
-            if (lastIdx < text.length()) {
-                 ChatThemeUtils.smartInsert(doc, text.substring(lastIdx), mainAttrs);
-            }
-            
-            doc.setParagraphAttributes(0, doc.getLength(), mainAttrs, false);
-            
-        } catch (BadLocationException e) { 
-            textComp.setText(text); 
-        }
+            if (lastIdx < text.length()) ChatThemeUtils.smartInsert(doc, text.substring(lastIdx), mainAttrs);
+        } catch (BadLocationException e) { textComp.setText(text); }
     }
     
     private static String extractUrl(String text) {
