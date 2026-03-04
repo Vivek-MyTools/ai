@@ -55,10 +55,11 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
             "\\[(.*?)\\]\\((https?://.*?)\\)|" +                                        // 7-8: Md Link
             "((?-s)(?:(?:^|\\n)[^\\n]*\\|[^\\n]*\\n)+(?:[^\\n]*\\|[-:| ]+\\|?[^\\n]*\\n)(?:[^\\n]*\\|[^\\n]*(?:\\n|$))*)" // 9: Table
     );
-    
+         
     private static final Pattern TEXT_FORMAT_PATTERN = Pattern.compile(
-            "(\\*\\*(.+?)\\*\\*)|" +  // Group 1 & 2: **Bold**
-            "(\\*(.+?)\\*)"           // Group 3 & 4: *Italic*
+        "(^(#{1,6})\\s+(.+)$)|" + // Group 1,2,3: Headings (Must be at start of line)
+        "(\\*\\*(.+?)\\*\\*)|" +    // Group 4 & 5: **Bold**
+        "(\\*(.+?)\\*)"             // Group 6 & 7: *Italic*
     );
     private Icon userIcon;
 
@@ -368,30 +369,40 @@ public class ChatMessagesPanel extends javax.swing.JPanel {
     private void appendMarkdownText(String text) {
         if (text == null || text.isEmpty()) return;
 
-        Matcher m = TEXT_FORMAT_PATTERN.matcher(text);
-        int lastIndex = 0;
+        // We split by newline to handle line-start markers like #
+        String[] lines = text.split("\n");
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i];
+            Matcher m = TEXT_FORMAT_PATTERN.matcher(line);
+            int lastIndex = 0;
 
-        while (m.find()) {
-            String plain = text.substring(lastIndex, m.start());
-            if (!plain.isEmpty()) append(plain, agentMsg);
+            while (m.find()) {
+                // Append plain text before the match
+                String plain = line.substring(lastIndex, m.start());
+                if (!plain.isEmpty()) append(plain, agentMsg);
 
-            if (m.group(1) != null) { 
-                String content = m.group(2);
-                append(content, agentMsgBold);
-            } else if (m.group(3) != null) {
-                String content = m.group(4); 
-                append(content, agentMsgItalic);
+                if (m.group(1) != null) { // Heading Match
+                    String content = m.group(3); // The text after ###
+                    // Apply agentMsgBold for now, or create a specific Heading Style
+                    append(content, agentMsgBold); 
+                } else if (m.group(4) != null) { // Bold
+                    append(m.group(5), agentMsgBold);
+                } else if (m.group(6) != null) { // Italic
+                    append(m.group(7), agentMsgItalic);
+                }
+                lastIndex = m.end();
             }
 
-            lastIndex = m.end();
-        }
+            if (lastIndex < line.length()) {
+                append(line.substring(lastIndex), agentMsg);
+            }
 
-        if (lastIndex < text.length()) {
-            append(text.substring(lastIndex), agentMsg);
+            // Add the newline back if it's not the last line
+            if (i < lines.length - 1) append("\n", agentMsg);
         }
     }
     
-   private void refreshAllComponents() {
+    private void refreshAllComponents() {
         StyledDocument doc = chatPane.getStyledDocument();
         Element root = doc.getDefaultRootElement();
 
