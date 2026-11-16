@@ -35,18 +35,29 @@ public class ChatMessageWindow {
     
     public void newAgent() {
         UIBackgroundTaskExecutor.run(() -> {
-            SuperAgentFactory factory = new SuperAgentFactory(model);
+            try {
+                SuperAgentFactory factory = new SuperAgentFactory(model);
 
-            String fullSystemPrompt = SuperAgentFactory.DEFAULT_SYSTEM_PROMPT;
-            if (!customSystemRules.isEmpty()) {
-                fullSystemPrompt += "\n" + customSystemRules;
-            }            
-            System.out.println("Creating new agent with KnowledgeBase = " + knowledgeBase);
-            chatAgent = factory.createSuperAgent(
-                    knowledgeBase,
-                    fullSystemPrompt,
-                    externalTools.toArray()
-            );
+                String fullSystemPrompt = SuperAgentFactory.DEFAULT_SYSTEM_PROMPT;
+                if (!customSystemRules.isEmpty()) {
+                    fullSystemPrompt += "\n" + customSystemRules;
+                }            
+                System.out.println("Creating new agent with KnowledgeBase = " + knowledgeBase);
+                chatAgent = factory.createSuperAgent(
+                        knowledgeBase,
+                        fullSystemPrompt,
+                        externalTools.toArray()
+                );
+            } catch (Exception e) {
+                System.err.println("❌ Failed to create agent: " + e.getMessage());
+                if (chatMessagesPanel != null) {
+                    Throwable cause = e.getCause() != null ? e.getCause() : e;
+                    String errorMsg = cause.getMessage();
+                    javax.swing.SwingUtilities.invokeLater(() ->
+                        chatMessagesPanel.addAgentMessage("❌ Failed to initialize model " + model + ":\n" + errorMsg)
+                    );
+                }
+            }
         });
     }    
     

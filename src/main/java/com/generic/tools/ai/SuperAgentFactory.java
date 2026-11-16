@@ -8,6 +8,7 @@ import java.util.logging.Logger;
 
 import com.generic.tools.ai.agent.Assistant;
 import com.generic.tools.ai.helper.OllamaHelper;
+import com.generic.tools.ai.helper.OpenRouterHelper;
 import com.generic.tools.ai.tools.*;
 import dev.langchain4j.data.document.Document;
 import dev.langchain4j.data.document.loader.FileSystemDocumentLoader;
@@ -91,25 +92,9 @@ public class SuperAgentFactory {
         
         if (extraTools != null) Collections.addAll(allTools, extraTools); 
         
-        // Smart Memory Budget: Local models get more context, cloud gets less (to save money)
-        boolean isLocal = OllamaHelper.isOllamaModel(modelName) || OllamaHelper.isOllamaAvailable();
-        
-        int memoryBudget = 2000;          // non-Ollama (cloud) default
-        if (isLocal) {
-            // 3️⃣ Ollama models – map name → context window
-            switch (modelName.toLowerCase()) {
-                case "gpt-oss:20b-cloud":
-                    memoryBudget = 8192;   // 8 192 tokens
-                    break;
-                case "qwen3-coder:480b-cloud":
-                    memoryBudget = 32768;  // 32 768 tokens
-                    break;
-                // Add more Ollama models here as needed
-                default:
-                    memoryBudget = 4000;   // generic Ollama fallback
-                    break;
-            }
-        }
+        // Smart Memory Budget: OpenRouter/Cloud models get generous context, local models default budget
+        boolean isLocal = OllamaHelper.isOllamaAvailable() && OllamaHelper.isInstalledInOllama(modelName);
+        int memoryBudget = isLocal ? 4000 : 8192;
 
         return AiServices.builder(Assistant.class)
                 .chatLanguageModel(model)
@@ -122,51 +107,75 @@ public class SuperAgentFactory {
                 .build();
     }
     
-private ChatLanguageModel createLanguageModel() {
-    String cacheKey = this.modelName + "::" + (this.customBaseUrl != null ? this.customBaseUrl : "default");
+    private ChatLanguageModel createLanguageModel() {
+        String cacheKey = this.modelName + "::" + (this.customBaseUrl != null ? this.customBaseUrl : "default");
 
-    return modelCache.computeIfAbsent(cacheKey, key -> {
-        String normalizedName = modelName.toLowerCase();
+        return modelCache.computeIfAbsent(cacheKey, key -> {
+            String resolvedName = OpenRouterHelper.resolveModelName(modelName);
+            String normalizedName = resolvedName.toLowerCase();
 
-        // 1. Google Gemini
-        if (normalizedName.startsWith("gemini")) {
-            return createGeminiModel();
-        }
-
-        // 2. OLLAMA (Local & Cloud)
-        boolean isCloudModel = normalizedName.contains("-cloud");
-        if (isCloudModel || normalizedName.contains("llama") || OllamaHelper.isOllamaModel(modelName)) {
+            // 1. Local Ollama Check:
+            // If local Ollama host is specified or local Ollama is running and model is installed locally, use local Ollama
+            boolean isLocalOllamaHost = this.customBaseUrl != null && this.customBaseUrl.contains("localhost");
+            boolean isInstalledLocallyInOllama = OllamaHelper.isOllamaAvailable() && OllamaHelper.isInstalledInOllama(resolvedName);
             
-            // URL handling to avoid the 404 /api/api/chat issue
-            String ollamaUrl = (isCloudModel && !OllamaHelper.isOllamaAvailable()) 
-                               ? "https://ollama.com" 
-                               : OllamaHelper.getOllamaBaseUrl();
-
-            // Fetch key from constructor or ENV
-            String effectiveKey = (this.apiKey != null) ? this.apiKey : System.getenv("OLLAMA_API_KEY");
-            LOG.info("Creating Agent using >>>>>OLLAMA_API_KEY !!<<<<<<");
-            var builder = OllamaChatModel.builder()
-                    .baseUrl(ollamaUrl)
-                    .modelName(this.modelName)
-                    .temperature(0.0)
-                    .timeout(Duration.ofMinutes(5))
-                    .numCtx(8192);
-
-            // CRITICAL: This is what solves the 401 error
-            if (effectiveKey != null && !effectiveKey.isBlank()) {
-                builder.customHeaders(Collections.singletonMap("Authorization", "Bearer " + effectiveKey));
-                LOG.info("🔐 Authorization header successfully injected for " + modelName);
-            } else if (isCloudModel) {
-                throw new RuntimeException("CRITICAL: OLLAMA_API_KEY is missing but required for cloud model.");
+            if (isLocalOllamaHost || isInstalledLocallyInOllama) {
+                String ollamaUrl = (this.customBaseUrl != null && !this.customBaseUrl.isBlank())
+                        ? this.customBaseUrl
+                        : OllamaHelper.getOllamaBaseUrl();
+                LOG.info("🏠 Routing to Local Ollama model: " + resolvedName + " at " + ollamaUrl);
+                return OllamaChatModel.builder()
+                        .baseUrl(ollamaUrl)
+                        .modelName(resolvedName)
+                        .temperature(0.0)
+                        .timeout(Duration.ofMinutes(5))
+                        .numCtx(8192)
+                        .build();
             }
 
-            return builder.build();
+            // 2. Google Gemini direct API check (if model starts with gemini without provider '/' and GEMINI key exists)
+            if (normalizedName.startsWith("gemini") && !normalizedName.contains("/") &&
+                    (this.apiKey != null || System.getenv("GOOGLE_AI_GEMINI_API_KEY") != null || System.getenv("GEMINI_API_KEY") != null)) {
+                return createGeminiModel();
+            }
+
+            // 3. OpenRouter Provider (Default Cloud Provider)
+            if (OpenRouterHelper.isOpenRouterModel(resolvedName) || OpenRouterHelper.getApiKey(this.apiKey) != null || normalizedName.contains("openrouter")) {
+                return createOpenRouterModel(resolvedName);
+            }
+
+            // 4. OpenAI / Fallback
+            return createOpenAiModel(resolveOpenAiBaseUrl());
+        });
+    }
+
+    private ChatLanguageModel createOpenRouterModel(String targetModelName) {
+        String effectiveKey = OpenRouterHelper.getApiKey(this.apiKey);
+        if (effectiveKey == null || effectiveKey.isBlank()) {
+            throw new RuntimeException("CRITICAL: OPENROUTER_API_KEY environment variable is missing or invalid.\n"
+                    + "Please set OPENROUTER_API_KEY (OpenRouter keys start with 'sk-or-v1-').");
         }
 
-        // 3. OpenAI / Fallback
-        return createOpenAiModel(resolveOpenAiBaseUrl());
-    });
-}
+        String targetUrl = (this.customBaseUrl != null && !this.customBaseUrl.isBlank())
+                ? this.customBaseUrl
+                : OpenRouterHelper.getOpenRouterBaseUrl();
+
+        LOG.info("🌐 Creating OpenRouter Chat Model: " + targetModelName + " at " + targetUrl);
+
+        Map<String, String> customHeaders = new HashMap<>();
+        customHeaders.put("HTTP-Referer", "https://github.com/generic-tools/ai");
+        customHeaders.put("X-Title", "AI Assistant Panel");
+
+        return OpenAiChatModel.builder()
+                .baseUrl(targetUrl)
+                .apiKey(effectiveKey)
+                .modelName(targetModelName)
+                .temperature(0.0)
+                .timeout(Duration.ofMinutes(3))
+                .maxRetries(1)
+                .customHeaders(customHeaders)
+                .build();
+    }
 
     // --- HELPER: Resolve OpenAI URL ---
     // Returns the custom URL if the user gave one, otherwise the official OpenAI URL.
@@ -199,7 +208,7 @@ private ChatLanguageModel createLanguageModel() {
     }
 
     private ChatLanguageModel createGeminiModel() {
-        String key = (this.apiKey != null) ? this.apiKey : System.getenv("GOOGLE_AI_GEMINI_API_KEY");
+        String key = (this.apiKey != null) ? this.apiKey : (System.getenv("GOOGLE_AI_GEMINI_API_KEY") != null ? System.getenv("GOOGLE_AI_GEMINI_API_KEY") : System.getenv("GEMINI_API_KEY"));
         if (key == null) throw new IllegalArgumentException("Missing Gemini API Key");
         
         return GoogleAiGeminiChatModel.builder()

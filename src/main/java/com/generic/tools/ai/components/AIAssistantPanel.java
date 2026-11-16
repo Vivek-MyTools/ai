@@ -205,7 +205,7 @@ public class AIAssistantPanel extends javax.swing.JPanel {
 
         jPanel1.setLayout(new java.awt.FlowLayout(java.awt.FlowLayout.LEFT));
 
-        modelList.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "gpt-oss:20b-cloud", "qwen3-coder:480b-cloud", "llama3.2", "gemini-2.5-flash", "gemini-2.5-flash-lite", "gpt-4o", "gpt-3.5-turbo" }));
+        modelList.setModel(new javax.swing.DefaultComboBoxModel<>(new String[] { "meta-llama/llama-3.3-70b-instruct", "google/gemini-2.0-flash-exp", "deepseek/deepseek-r1", "qwen/qwen-2.5-coder-32b-instruct", "meta-llama/llama-3.2-3b-instruct", "mistralai/mistral-7b-instruct", "google/gemini-2.0-flash-001", "openai/gpt-4o-mini", "llama3.2" }));
         modelList.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 modelListActionPerformed(evt);
@@ -342,6 +342,9 @@ public class AIAssistantPanel extends javax.swing.JPanel {
                     inputPanel.clearInput();
                 } catch (InterruptedException | ExecutionException ex) {
                     LOG.log(Level.SEVERE, null, ex);
+                    String errorMsg = handleException(ex);
+                    messagesPanel.addAgentMessage("❌ Failed to initialize model " + model + ":\n" + errorMsg);
+                    inputPanel.setEnabledInput(true);
                 }
             }
 
