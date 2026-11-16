@@ -172,7 +172,7 @@ public class SuperAgentFactory {
                 .modelName(targetModelName)
                 .temperature(0.0)
                 .timeout(Duration.ofMinutes(3))
-                .maxRetries(1)
+                .maxRetries(3)
                 .customHeaders(customHeaders)
                 .build();
     }

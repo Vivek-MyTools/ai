@@ -1,4 +1,6 @@
 package com.generic.tools.ai.tools;
+
+import dev.langchain4j.agent.tool.P;
 import dev.langchain4j.agent.tool.Tool;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -9,16 +11,17 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Pattern;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
+
 /**
- *
- * @author vipa0816
+ * Climate and Weather Information Tool
  */
 public class ClimateInfoTool {
-     private static final String GEOCODE_URL =
+    private static final String GEOCODE_URL =
             "https://geocoding-api.open-meteo.com/v1/search?name=%s&count=1";
 
     private static final String WEATHER_URL =
@@ -36,17 +39,23 @@ public class ClimateInfoTool {
     }
 
     @Tool("""
-        Returns current weather conditions for cities using wttr.in.
+        Returns current weather conditions for cities.
         
         Guidelines:
-        - You can accept multiple city names separated by commas or 'and'.
-        - The agent should split cities and call this tool separately for each city.
+        - You can accept single or multiple city names separated by commas or 'and'.
         - Returns a simple summary with emoji, temperature (°C), and basic condition.
         
-        Example input: "Kochi"
-        Example output: "Kochi: 🌤 +28°C"
+        Example input: "Delhi"
+        Example output: "Delhi: ☀️ +20°C"
         """)
-    public String getWeather(String cities) {
+    public String getWeather(
+            @P("City name or list of cities separated by commas or 'and', e.g., 'Delhi', 'Kochi', or 'Delhi and Mumbai'.")
+            String cities
+    ) {
+        if (cities == null || cities.isBlank()) {
+            return "❌ Error: City name was missing.";
+        }
+
         List<String> cityList = splitCities(cities);
         List<String> results = new ArrayList<>();
 
@@ -74,7 +83,7 @@ public class ClimateInfoTool {
         try {
             // 1. Geocode city → lat/lon
             String encodedCity = URLEncoder.encode(city, StandardCharsets.UTF_8);
-            String geoUrl = String.format(GEOCODE_URL, encodedCity);
+            String geoUrl = String.format(Locale.US, GEOCODE_URL, encodedCity);
 
             HttpRequest geoRequest = HttpRequest.newBuilder()
                     .uri(URI.create(geoUrl))
@@ -97,7 +106,7 @@ public class ClimateInfoTool {
             double longitude = location.getDouble("longitude");
 
             // 2. Fetch current weather
-            String weatherUrl = String.format(WEATHER_URL, latitude, longitude);
+            String weatherUrl = String.format(Locale.US, WEATHER_URL, latitude, longitude);
 
             HttpRequest weatherRequest = HttpRequest.newBuilder()
                     .uri(URI.create(weatherUrl))
@@ -119,13 +128,10 @@ public class ClimateInfoTool {
             return city + ": " + emoji + " +" + Math.round(temperature) + "°C";
 
         } catch (Exception e) {
-            return city + ": ❌ Weather unavailable";
+            return city + ": ❌ Weather unavailable (" + e.getMessage() + ")";
         }
     }
 
-    /**
-     * Open-Meteo weather code mapping
-     */
     private String mapWeatherCodeToEmoji(int code) {
         if (code == 0) return "☀️";               // Clear
         if (code <= 2) return "🌤";               // Mainly clear

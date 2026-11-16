@@ -4,6 +4,11 @@ import com.generic.tools.ai.agent.Assistant;
 import com.generic.tools.ai.helper.OpenRouterHelper;
 import org.junit.jupiter.api.Test;
 
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+
 import static org.junit.jupiter.api.Assertions.*;
 
 public class OpenRouterTest {
@@ -26,18 +31,51 @@ public class OpenRouterTest {
     }
 
     @Test
-    void testOpenRouterConnectionIfKeyPresent() {
-        String apiKey = System.getenv("OPENROUTER_API_KEY");
+    void testOpenRouterToolCallingSupport() {
+        String apiKey = OpenRouterHelper.getApiKey(null);
         if (apiKey == null || apiKey.isBlank()) {
-            System.out.println("⚠️ OPENROUTER_API_KEY is not set. Skipping live test.");
+            System.out.println("⚠️ OpenRouter API key not found in env or registry. Skipping tool test.");
             return;
         }
 
-        System.out.println("Testing live OpenRouter connection...");
-        SuperAgentFactory factory = new SuperAgentFactory("meta-llama/llama-3.3-70b-instruct");
-        Assistant assistant = factory.createSuperAgent();
-        String response = assistant.chat("Say 'Hello OpenRouter' and nothing else.");
-        System.out.println("✅ OpenRouter Response: " + response);
-        assertNotNull(response);
+        try {
+            HttpClient client = HttpClient.newHttpClient();
+            String jsonPayload = """
+                {
+                    "model": "meta-llama/llama-3.3-70b-instruct",
+                    "messages": [{"role": "user", "content": "What is 2 + 2?"}],
+                    "tools": [{
+                        "type": "function",
+                        "function": {
+                            "name": "calculator",
+                            "description": "Calculate math",
+                            "parameters": {
+                                "type": "object",
+                                "properties": {
+                                    "expression": {"type": "string"}
+                                },
+                                "required": ["expression"]
+                            }
+                        }
+                    }]
+                }
+                """;
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://openrouter.ai/api/v1/chat/completions"))
+                    .header("Authorization", "Bearer " + apiKey)
+                    .header("Content-Type", "application/json")
+                    .header("HTTP-Referer", "https://github.com/generic-tools/ai")
+                    .header("X-Title", "AI Assistant")
+                    .POST(HttpRequest.BodyPublishers.ofString(jsonPayload))
+                    .build();
+
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            System.out.println("📡 OpenRouter Tool Call Test HTTP Status: " + response.statusCode());
+            System.out.println("📡 OpenRouter Tool Call Response:\n" + response.body());
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 }

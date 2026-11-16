@@ -343,11 +343,36 @@ public class ChatPanel extends javax.swing.JPanel {
             });
         } catch (Exception e) {
             if (e instanceof InterruptedException) return;
+            String cleanError = handleException(e);
             uiUpdate(token, () -> {
-                targetWindow.getChatMessagesPanel().addAgentMessage("Error: " + e.getMessage());
+                targetWindow.getChatMessagesPanel().addAgentMessage("Error: " + cleanError);
                 finalizeTask(targetWindow);
             });
         }
+    }
+
+    private String handleException(Exception ex) {
+        Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+        String rawMsg = cause.getMessage();
+
+        if (rawMsg == null || cause instanceof NullPointerException || rawMsg.contains("choices()")) {
+            return "OpenRouter model rate limit or provider error. Please try sending your message again or select another model.";
+        }
+
+        if (rawMsg.contains("\"message\":")) {
+            try {
+                java.util.regex.Pattern p = java.util.regex.Pattern.compile("\"message\":\\s*\"(.*?)\"");
+                java.util.regex.Matcher m = p.matcher(rawMsg);
+                if (m.find()) {
+                    return m.group(1);
+                }
+            } catch (Exception ignored) {}
+        }
+
+        if (rawMsg.contains("timed out")) return "Connection timed out. Server is slow.";
+        if (rawMsg.contains("404")) return "Model not found or API disabled.";
+
+        return rawMsg;
     }
 
     private void finalizeTask(ChatMessageWindow window) {

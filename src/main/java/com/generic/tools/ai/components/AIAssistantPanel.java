@@ -380,7 +380,9 @@ public class AIAssistantPanel extends javax.swing.JPanel {
         Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
         String rawMsg = cause.getMessage();
         
-        if (rawMsg == null) return "Unknown error occurred.";
+        if (rawMsg == null || cause instanceof NullPointerException || rawMsg.contains("choices()")) {
+            return "OpenRouter model rate limit or provider error. Please try sending your message again or select another model.";
+        }
 
         // 2. Check for common JSON error pattern: "message": "THE REAL ERROR"
         if (rawMsg.contains("\"message\":")) {
